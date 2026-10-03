@@ -1,0 +1,193 @@
+// Prisma Schema for Student OD & Leave Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TUTOR
+  CLASS_ADVISOR
+  HOD
+  PRINCIPAL_OFFICE
+  ADMIN
+}
+
+enum ApplicationType {
+  OD
+  LEAVE
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkflowStage {
+  SUBMITTED
+  TUTOR_PENDING
+  ADVISOR_PENDING
+  HOD_PENDING
+  PRINCIPAL_PENDING
+  COMPLETED
+  REJECTED
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  CONFIRMED_FORWARDED
+  COMPLETED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  username     String        @unique
+  email        String?       @unique
+  passwordHash String
+  role         Role
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  studentProfile Student?
+  staffProfile   Staff?
+  notifications  Notification[]
+}
+
+model Department {
+  id        String    @id @default(uuid())
+  name      String
+  code      String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  students Student[]
+  staff    Staff[]
+}
+
+model Student {
+  id             String      @id @default(uuid())
+  userId         String      @unique
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registerNumber String      @unique
+  rollNumber     String?     @unique
+  name           String
+  email          String?     @unique
+  studentPhone   String?
+  parentPhone    String?
+  departmentId   String
+  department     Department  @relation(fields: [departmentId], references: [id])
+  year           Int
+  section        String
+  tutorId        String?
+  tutor          Staff?      @relation("StudentTutor", fields: [tutorId], references: [id])
+  classAdvisorId String?
+  classAdvisor   Staff?      @relation("StudentClassAdvisor", fields: [classAdvisorId], references: [id])
+
+  applications   Application[]
+}
+
+model Staff {
+  id           String     @id @default(uuid())
+  userId       String     @unique
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  employeeId   String     @unique
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  role         Role
+
+  tutoredStudents    Student[]            @relation("StudentTutor")
+  advisedStudents    Student[]            @relation("StudentClassAdvisor")
+  approvalHistories  ApprovalHistory[]
+  parentConfirmations ParentConfirmation[]
+}
+
+model Application {
+  id                String            @id @default(uuid())
+  applicationNumber String            @unique
+  type              ApplicationType
+  studentId         String
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  leaveType         String?
+  fromDate          DateTime
+  toDate            DateTime
+  reason            String
+  eventName         String?
+  venue             String?
+  description       String?
+  status            ApplicationStatus @default(PENDING)
+  currentStage      WorkflowStage     @default(SUBMITTED)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  approvalHistories  ApprovalHistory[]
+  parentConfirmation ParentConfirmation?
+  documents          Document[]
+  notifications      Notification[]
+}
+
+model ParentConfirmation {
+  id            String      @id @default(uuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  isConfirmed   Boolean
+  confirmedAt   DateTime    @default(now())
+  advisorId     String
+  advisor       Staff       @relation(fields: [advisorId], references: [id])
+  remarks       String?
+}
+
+model ApprovalHistory {
+  id            String         @id @default(uuid())
+  applicationId String
+  application   Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  staffId       String
+  staff         Staff          @relation(fields: [staffId], references: [id])
+  role          Role
+  action        ApprovalAction
+  remarks       String?
+  timestamp     DateTime       @default(now())
+}
+
+model Document {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fileName      String
+  filePath      String
+  fileType      String
+  storageType   String      @default("LOCAL")
+  uploadedAt    DateTime    @default(now())
+}
+
+model Notification {
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  message       String
+  isRead        Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  adminId       String
+  adminUsername String
+  action        String
+  targetType    String
+  targetId      String?
+  details       String?
+  previousValue String?
+  newValue      String?
+  createdAt     DateTime @default(now())
+}

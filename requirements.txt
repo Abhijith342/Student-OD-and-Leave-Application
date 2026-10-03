@@ -1,0 +1,37 @@
+# System Environment & Runtime Requirements
+node>=18.0.0
+npm>=9.0.0
+python>=3.8.0
+
+# Backend Node.js / Express Package Requirements
+# (Managed via backend/package.json)
+express==5.2.1
+@prisma/client==6.4.0
+prisma==6.4.0
+bcryptjs==3.0.3
+jsonwebtoken==9.0.3
+multer==2.4.0
+pdfkit==0.20.2
+xlsx==0.18.5
+cors==2.8.6
+dotenv==18.0.5
+
+# Backend Dev & Testing Requirements
+jest==30.5.2
+supertest==7.3.1
+nodemon==3.1.14
+
+# Frontend React / Vite Package Requirements
+# (Managed via frontend/package.json)
+react==19.2.8
+react-dom==19.2.8
+react-router-dom==7.18.4
+lucide-react==1.50.0
+tailwindcss==4.3.3
+@tailwindcss/vite==4.3.3
+vite==8.3.0
+
+# Optional Python Data & Excel Utilities
+openpyxl>=3.1.0
+pandas>=2.0.0
+requests>=2.31.0
