@@ -4,6 +4,64 @@ A modern, role-based, enterprise-grade **Student On-Duty (OD) and Leave Manageme
 
 ---
 
+## 🚀 Quickstart: How to Install & Run the System
+
+Follow these steps once you clone this repository:
+
+### 1. Prerequisites
+- **Node.js**: v18.0.0 or higher
+- **npm**: v9.0.0 or higher
+- **Git**: Installed
+
+### 2. Clone the Repository
+```bash
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+cd "Student OD&Leave"
+```
+
+### 3. Install & Setup Backend
+```bash
+# Navigate to backend folder
+cd backend
+
+# Install backend dependencies
+npm install
+
+# Initialize database schema (SQLite)
+npx prisma db push
+
+# Seed initial database records and demo accounts
+node prisma/seed.js
+```
+
+### 4. Install Frontend Dependencies
+```bash
+# In a new terminal tab/window (from root directory):
+cd frontend
+
+# Install frontend dependencies
+npm install
+```
+
+### 5. Run the Application
+Open **two terminal windows**:
+
+- **Terminal 1: Start Backend Server**
+  ```bash
+  cd backend
+  npm start
+  ```
+  *(Backend runs on `http://localhost:5000`)*
+
+- **Terminal 2: Start Frontend Web Interface**
+  ```bash
+  cd frontend
+  npm run dev
+  ```
+  *(Frontend opens on `http://localhost:5173`)*
+
+---
+
 ## 🌟 Key Features & Administration Module
 
 - **System Administration Module (`role = ADMIN`)**: Full institutional management over Students, Staff, Departments, Academic Structure, Staff Assignments, Excel Imports, Application Monitoring, Reports, and Audit Trails.
