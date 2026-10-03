@@ -17,21 +17,6 @@ A modern, role-based, enterprise-grade **Student On-Duty (OD) and Leave Manageme
 
 ---
 
-## 🔑 Seeded Demo Login Accounts
-
-All accounts use default password: `Password123!`
-
-| Role | Username / Identifier | Display Name | Department | Purpose / Action |
-| :--- | :--- | :--- | :--- | :--- |
-| **System Admin** | `admin` | System Admin | College-wide | Manage data, staff, students, depts, reports & audit logs |
-| **Student 1** | `710724243001` | ABINAYA N | AI & DS | Submit OD / Leave & download certificate |
-| **Student 2** | `710724243085` | S ABHIJITH | AI & DS | Submit OD / Leave & download certificate |
-| **Tutor & Class Advisor** | `premkumar` | N PREMKUMAR | AI & DS | Tutor review & Advisor parent confirmation |
-| **Tutor** | `divya` | C DIVYA REVATHI | AI & DS | Tutor approvals queue |
-| **HOD** | `pavithra` | PAVITHRA | AI & DS | Department HOD review & approval |
-| **Principal Office** | `principal_office` | Superintendent | Principal Office | Final OD authorization & seal completion |
-
----
 
 ## 📋 Approval Workflows (Untouched & Preserved)
 
