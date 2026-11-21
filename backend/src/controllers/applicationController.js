@@ -144,6 +144,22 @@ async function tutorReview(req, res, next) {
   }
 }
 
+async function advisorReview(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { action, remarks } = req.body;
+    const updated = await applicationService.advisorReview(id, req.user.staffId, action || 'APPROVE', remarks);
+
+    res.status(200).json({
+      status: 'success',
+      message: `Application ${action === 'REJECT' ? 'rejected' : 'reviewed and forwarded to HOD'} by Class Advisor.`,
+      data: { application: updated }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function advisorConfirmParent(req, res, next) {
   try {
     const { id } = req.params;
@@ -214,7 +230,37 @@ async function downloadPDF(req, res, next) {
   }
 }
 
+
+async function getDailyStatus(req, res, next) {
+  try {
+    const { date } = req.query;
+    const result = await applicationService.getDailyStatus(req.user, date);
+    res.status(200).json({
+      status: 'success',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+
+async function getAvailableApplications(req, res, next) {
+  try {
+    const applications = await applicationService.getAvailableApplications(req.user);
+    res.status(200).json({
+      status: 'success',
+      results: applications.length,
+      data: { applications }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getAvailableApplications,
+  getDailyStatus,
   createOD,
   createLeave,
   getMyApplications,
@@ -224,6 +270,7 @@ module.exports = {
   getHodApplications,
   getPrincipalOfficeApplications,
   tutorReview,
+  advisorReview,
   advisorConfirmParent,
   hodReview,
   principalOfficeComplete,

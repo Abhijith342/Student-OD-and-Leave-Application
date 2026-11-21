@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
   Users, 
   Search, 
@@ -16,7 +16,10 @@ import {
   Building2,
   Phone,
   Mail,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function AdminStudents() {
@@ -40,6 +43,18 @@ export default function AdminStudents() {
   const [editStudent, setEditStudent] = useState(null);
   const [selectedStudent, setSelectedStudent] = useState(null);
 
+  // Quick Photo Upload Modal State
+  const [photoModalStudent, setPhotoModalStudent] = useState(null);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState(null);
+  const [photoSuccess, setPhotoSuccess] = useState(null);
+
+  // Edit/Create Modal Photo state
+  const [formPhotoFile, setFormPhotoFile] = useState(null);
+  const [formPhotoPreview, setFormPhotoPreview] = useState(null);
+
   // Form State
   const [formData, setFormData] = useState({
     name: '',
@@ -51,6 +66,8 @@ export default function AdminStudents() {
     email: '',
     studentPhone: '',
     parentPhone: '',
+    residenceType: 'DAYSCHOLAR',
+    cutoff: '',
     tutorId: '',
     classAdvisorId: '',
     password: ''
@@ -74,8 +91,8 @@ export default function AdminStudents() {
         apiRequest('/admin/departments'),
         apiRequest('/admin/staff')
       ]);
-      setDepartments(deptRes.data.departments);
-      setStaffList(staffRes.data.staff);
+      setDepartments(deptRes.data.departments || []);
+      setStaffList(staffRes.data.staff || []);
     } catch (err) {
       console.error('Failed to load metadata:', err);
     }
@@ -95,7 +112,7 @@ export default function AdminStudents() {
       if (active !== '') params.append('active', active);
 
       const res = await apiRequest(`/admin/students?${params.toString()}`);
-      setStudents(res.data.students);
+      setStudents(res.data.students || []);
     } catch (err) {
       setError(err.message || 'Failed to fetch student records.');
     } finally {
@@ -107,6 +124,8 @@ export default function AdminStudents() {
     setEditStudent(null);
     setFormError(null);
     setFormSuccess(null);
+    setFormPhotoFile(null);
+    setFormPhotoPreview(null);
     setFormData({
       name: '',
       registerNumber: '',
@@ -117,6 +136,8 @@ export default function AdminStudents() {
       email: '',
       studentPhone: '',
       parentPhone: '',
+      residenceType: 'DAYSCHOLAR',
+      cutoff: '',
       tutorId: '',
       classAdvisorId: '',
       password: ''
@@ -128,6 +149,8 @@ export default function AdminStudents() {
     setEditStudent(st);
     setFormError(null);
     setFormSuccess(null);
+    setFormPhotoFile(null);
+    setFormPhotoPreview(st.profilePhoto || st.user?.profilePhoto || null);
     setFormData({
       name: st.name || '',
       registerNumber: st.registerNumber || '',
@@ -138,6 +161,8 @@ export default function AdminStudents() {
       email: st.email || st.user?.email || '',
       studentPhone: st.studentPhone || '',
       parentPhone: st.parentPhone || '',
+      residenceType: st.residenceType || 'DAYSCHOLAR',
+      cutoff: st.cutoff !== null && st.cutoff !== undefined ? String(st.cutoff) : '',
       tutorId: st.tutorId || '',
       classAdvisorId: st.classAdvisorId || '',
       password: ''
@@ -152,16 +177,29 @@ export default function AdminStudents() {
     setSubmitting(true);
 
     try {
+      let body;
+      if (formPhotoFile) {
+        body = new FormData();
+        Object.keys(formData).forEach(k => {
+          if (formData[k] !== undefined && formData[k] !== null) {
+            body.append(k, formData[k]);
+          }
+        });
+        body.append('profilePhoto', formPhotoFile);
+      } else {
+        body = JSON.stringify(formData);
+      }
+
       if (editStudent) {
         await apiRequest(`/admin/students/${editStudent.id}`, {
           method: 'PUT',
-          body: JSON.stringify(formData)
+          body
         });
         setFormSuccess('Student profile updated successfully!');
       } else {
         await apiRequest('/admin/students', {
           method: 'POST',
-          body: JSON.stringify(formData)
+          body
         });
         setFormSuccess('Student created successfully!');
       }
@@ -173,6 +211,79 @@ export default function AdminStudents() {
       setFormError(err.message || 'Failed to save student record.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Quick Photo Modal Handlers
+  const openPhotoUploadModal = (st) => {
+    setPhotoModalStudent(st);
+    setSelectedPhotoFile(null);
+    setPhotoPreviewUrl(st.profilePhoto || st.user?.profilePhoto || null);
+    setPhotoError(null);
+    setPhotoSuccess(null);
+  };
+
+  const handlePhotoSelect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedPhotoFile(file);
+      setPhotoPreviewUrl(URL.createObjectURL(file));
+      setPhotoError(null);
+    }
+  };
+
+  const handlePhotoUploadSubmit = async () => {
+    if (!selectedPhotoFile || !photoModalStudent) {
+      setPhotoError('Please choose an image file first.');
+      return;
+    }
+    setPhotoUploading(true);
+    setPhotoError(null);
+    try {
+      const fd = new FormData();
+      fd.append('profilePhoto', selectedPhotoFile);
+      const res = await apiRequest(`/admin/students/${photoModalStudent.id}/photo`, {
+        method: 'POST',
+        body: fd
+      });
+      setPhotoSuccess('Profile photo updated successfully!');
+      const updatedPath = res.data.profilePhoto;
+      setStudents(prev => prev.map(s => s.id === photoModalStudent.id ? { ...s, profilePhoto: updatedPath } : s));
+      if (selectedStudent?.id === photoModalStudent.id) {
+        setSelectedStudent(prev => ({ ...prev, profilePhoto: updatedPath }));
+      }
+      setTimeout(() => {
+        setPhotoModalStudent(null);
+      }, 900);
+    } catch (err) {
+      setPhotoError(err.message || 'Failed to upload photo.');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!photoModalStudent) return;
+    if (!window.confirm(`Remove profile photo for ${photoModalStudent.name}?`)) return;
+    setPhotoUploading(true);
+    try {
+      await apiRequest(`/admin/students/${photoModalStudent.id}/photo`, {
+        method: 'DELETE'
+      });
+      setPhotoPreviewUrl(null);
+      setSelectedPhotoFile(null);
+      setPhotoSuccess('Profile photo removed.');
+      setStudents(prev => prev.map(s => s.id === photoModalStudent.id ? { ...s, profilePhoto: null } : s));
+      if (selectedStudent?.id === photoModalStudent.id) {
+        setSelectedStudent(prev => ({ ...prev, profilePhoto: null }));
+      }
+      setTimeout(() => {
+        setPhotoModalStudent(null);
+      }, 700);
+    } catch (err) {
+      setPhotoError(err.message || 'Failed to remove photo.');
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -190,6 +301,22 @@ export default function AdminStudents() {
       fetchStudents();
     } catch (err) {
       alert(err.message || 'Failed to update student status.');
+    }
+  };
+
+  const handleDeleteStudent = async (st) => {
+    if (!window.confirm(`Are you sure you want to PERMANENTLY delete student ${st.name} (${st.registerNumber})? This will delete their profile and ID.`)) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/admin/students/${st.id}`, {
+        method: 'DELETE'
+      });
+      setStudents(prev => prev.filter(s => s.id !== st.id));
+      if (selectedStudent?.id === st.id) setSelectedStudent(null);
+    } catch (err) {
+      alert(err.message || 'Failed to delete student.');
     }
   };
 
@@ -371,9 +498,36 @@ export default function AdminStudents() {
                   return (
                     <tr key={st.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="p-3.5 font-bold font-mono text-slate-900">{st.registerNumber}</td>
-                      <td className="p-3.5 font-bold text-slate-800">
-                        {st.name}
-                        {st.rollNumber && <span className="text-[10px] text-blue-600 block">Roll: {st.rollNumber}</span>}
+                      <td className="p-3.5">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative group shrink-0">
+                            {st.profilePhoto || st.user?.profilePhoto ? (
+                              <img
+                                src={`http://localhost:5000${st.profilePhoto || st.user?.profilePhoto}`}
+                                alt={st.name}
+                                className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
+                                onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold items-center justify-center text-xs border border-blue-200 ${st.profilePhoto || st.user?.profilePhoto ? 'hidden' : 'flex'}`}
+                            >
+                              {st.name ? st.name.charAt(0).toUpperCase() : 'S'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openPhotoUploadModal(st)}
+                              title="Upload or Change Profile Photo"
+                              className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-xs transition-transform hover:scale-110"
+                            >
+                              <Camera className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 block leading-tight">{st.name}</span>
+                            {st.rollNumber && <span className="text-[10px] text-blue-600 block font-mono">Roll: {st.rollNumber}</span>}
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3.5 font-medium text-slate-700">{displayEmail}</td>
                       <td className="p-3.5 font-semibold text-blue-700 font-mono">{st.studentPhone || 'N/A'}</td>
@@ -415,6 +569,13 @@ export default function AdminStudents() {
                         >
                           {isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                         </button>
+                        <button
+                          onClick={() => handleDeleteStudent(st)}
+                          title="Permanently Delete Student ID"
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -450,6 +611,58 @@ export default function AdminStudents() {
                   <span>{formSuccess}</span>
                 </div>
               )}
+
+              {/* Student Profile Photo Upload */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-4">
+                <div className="relative shrink-0">
+                  {formPhotoPreview ? (
+                    <img
+                      src={formPhotoPreview.startsWith('blob:') ? formPhotoPreview : `http://localhost:5000${formPhotoPreview}`}
+                      alt="Student Preview"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-slate-300 shadow-xs"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-base border-2 border-slate-300">
+                      <Camera className="w-6 h-6 text-slate-400" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <label className="block font-bold text-slate-800 mb-0.5">Student Profile Photo</label>
+                  <p className="text-[11px] text-slate-500 mb-2.5">Upload a clean ID photo for this student (JPG, PNG, max 5MB)</p>
+                  <div className="flex items-center space-x-2">
+                    <label className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg cursor-pointer text-xs inline-flex items-center space-x-1.5 shadow-2xs transition-colors">
+                      <Upload className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{formPhotoPreview ? 'Change Photo' : 'Select Photo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const file = e.target.files[0];
+                            setFormPhotoFile(file);
+                            setFormPhotoPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                      />
+                    </label>
+                    {formPhotoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormPhotoFile(null);
+                          setFormPhotoPreview(null);
+                          setFormData({ ...formData, profilePhoto: null });
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold rounded-lg text-xs transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -561,6 +774,32 @@ export default function AdminStudents() {
                 </div>
 
                 <div>
+                  <label className="block font-bold text-slate-700 mb-1">Residence Status</label>
+                  <select
+                    value={formData.residenceType}
+                    onChange={(e) => setFormData({ ...formData, residenceType: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl"
+                  >
+                    <option value="DAYSCHOLAR">Day Scholar</option>
+                    <option value="HOSTEL">Hosteler</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Cutoff Mark (Out of 200)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="200"
+                    value={formData.cutoff}
+                    onChange={(e) => setFormData({ ...formData, cutoff: e.target.value })}
+                    placeholder="e.g. 194.50"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono"
+                  />
+                </div>
+
+                <div>
                   <label className="block font-bold text-slate-700 mb-1">Assigned Tutor</label>
                   <select
                     value={formData.tutorId}
@@ -634,6 +873,43 @@ export default function AdminStudents() {
               </button>
             </div>
 
+            {/* Profile Photo & Identity Banner */}
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl flex items-center justify-between gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="relative shrink-0">
+                  {selectedStudent.profilePhoto || selectedStudent.user?.profilePhoto ? (
+                    <img
+                      src={`http://localhost:5000${selectedStudent.profilePhoto || selectedStudent.user?.profilePhoto}`}
+                      alt={selectedStudent.name}
+                      className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md"
+                      onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }}
+                    />
+                  ) : null}
+                  <div className={`w-16 h-16 rounded-full bg-blue-600 text-white font-bold items-center justify-center text-xl shadow-md ${selectedStudent.profilePhoto || selectedStudent.user?.profilePhoto ? 'hidden' : 'flex'}`}>
+                    {selectedStudent.name ? selectedStudent.name.charAt(0).toUpperCase() : 'S'}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-slate-900">{selectedStudent.name}</h4>
+                  <p className="text-slate-600 font-mono text-xs font-semibold">{selectedStudent.registerNumber}</p>
+                  <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    selectedStudent.user?.active ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {selectedStudent.user?.active ? 'Active Account' : 'Inactive Account'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => openPhotoUploadModal(selectedStudent)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs flex items-center space-x-1.5 transition-colors shrink-0"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Update Photo</span>
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
               <div>
                 <span className="text-slate-400 block text-[10px]">Name</span>
@@ -667,6 +943,14 @@ export default function AdminStudents() {
                 <span className="text-slate-400 block text-[10px]">Parent Phone</span>
                 <strong className="text-emerald-700 font-mono">{selectedStudent.parentPhone || 'N/A'}</strong>
               </div>
+              <div>
+                <span className="text-slate-400 block text-[10px]">Residence Type</span>
+                <strong className="text-slate-800">{selectedStudent.residenceType === 'HOSTEL' ? 'Hostel Resident' : 'Day Scholar'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px]">Cutoff Mark</span>
+                <strong className="text-purple-700">{selectedStudent.cutoff !== null && selectedStudent.cutoff !== undefined ? `${selectedStudent.cutoff} / 200` : 'N/A'}</strong>
+              </div>
             </div>
 
             <div className="p-4 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1">
@@ -681,6 +965,98 @@ export default function AdminStudents() {
                 className="px-4 py-2 bg-slate-900 text-white font-bold rounded-xl"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Photo Upload Modal */}
+      {photoModalStudent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                <Camera className="w-4 h-4 text-blue-600" />
+                <span>Upload Student Profile Photo</span>
+              </h3>
+              <button onClick={() => setPhotoModalStudent(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-center space-y-3">
+              <div className="relative mx-auto w-24 h-24">
+                {photoPreviewUrl ? (
+                  <img
+                    src={photoPreviewUrl.startsWith('blob:') ? photoPreviewUrl : `http://localhost:5000${photoPreviewUrl}`}
+                    alt={photoModalStudent.name}
+                    className="w-24 h-24 rounded-full object-cover border-3 border-blue-500 shadow-md mx-auto"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-2xl border-3 border-blue-200 mx-auto">
+                    {photoModalStudent.name ? photoModalStudent.name.charAt(0).toUpperCase() : 'S'}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">{photoModalStudent.name}</h4>
+                <p className="text-slate-500 font-mono text-[11px]">{photoModalStudent.registerNumber}</p>
+              </div>
+
+              {photoError && (
+                <div className="p-2.5 bg-rose-50 text-rose-700 rounded-xl font-medium text-[11px]">
+                  {photoError}
+                </div>
+              )}
+              {photoSuccess && (
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium text-[11px]">
+                  {photoSuccess}
+                </div>
+              )}
+
+              <div className="pt-2 flex flex-col items-center space-y-2">
+                <label className="w-full py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl cursor-pointer text-xs flex items-center justify-center space-x-2 transition-colors border border-blue-200">
+                  <Upload className="w-4 h-4" />
+                  <span>Select Image from Device</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                </label>
+
+                {(photoModalStudent.profilePhoto || photoPreviewUrl) && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={photoUploading}
+                    className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Current Photo</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPhotoModalStudent(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePhotoUploadSubmit}
+                disabled={!selectedPhotoFile || photoUploading}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
+              >
+                {photoUploading ? 'Saving...' : 'Save Photo'}
               </button>
             </div>
           </div>

@@ -106,7 +106,7 @@ export default function PrincipalOfficeDashboard() {
                       ✓ Tutor Approved
                     </span>
                     <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
-                      ✓ Parent Confirmed
+                      ✓ Class Advisor Approved
                     </span>
                     <span className="bg-purple-50 text-purple-800 px-2 py-0.5 rounded border border-purple-200">
                       ✓ HOD Approved

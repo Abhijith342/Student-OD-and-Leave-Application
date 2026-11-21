@@ -1,3 +1,4 @@
+import { formatDateTime } from '../utils/dateUtils';
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -112,7 +113,7 @@ export default function Navbar({ toggleSidebar, sidebarOpen }) {
                       >
                         <p className="text-slate-800">{n.message}</p>
                         <span className="text-[10px] text-slate-400 mt-1 block">
-                          {new Date(n.createdAt).toLocaleString()}
+                          {formatDateTime(n.createdAt)}
                         </span>
                       </div>
                     ))
@@ -137,8 +138,16 @@ export default function Navbar({ toggleSidebar, sidebarOpen }) {
             to="/profile"
             className="flex items-center space-x-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm">
-              {user?.studentProfile?.name?.[0] || user?.staffProfile?.name?.[0] || user?.username?.[0] || 'U'}
+            <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm overflow-hidden ring-1 ring-slate-200">
+              {(user?.studentProfile?.profilePhoto || user?.staffProfile?.profilePhoto || user?.profilePhoto) ? (
+                <img
+                  src={user?.studentProfile?.profilePhoto || user?.staffProfile?.profilePhoto || user?.profilePhoto}
+                  alt={user?.studentProfile?.name || user?.username}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                user?.studentProfile?.name?.[0] || user?.staffProfile?.name?.[0] || user?.username?.[0] || 'U'
+              )}
             </div>
             <span className="text-sm font-semibold text-slate-800 hidden lg:inline">
               {user?.studentProfile?.name || user?.staffProfile?.name || user?.username}

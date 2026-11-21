@@ -1,8 +1,10 @@
+import { formatDate } from '../utils/dateUtils';
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../services/api';
 import { CalendarOff, Upload, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import DatePicker from '../components/DatePicker';
 
 export default function ApplyLeave() {
   const { user } = useAuth();
@@ -188,13 +190,12 @@ export default function ApplyLeave() {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 From Date *
               </label>
-              <input
-                type="date"
+              <DatePicker
                 name="fromDate"
                 required
                 value={formData.fromDate}
                 onChange={handleChange}
-                className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none"
+                placeholder="DD/MM/YYYY"
               />
             </div>
 
@@ -202,13 +203,13 @@ export default function ApplyLeave() {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 To Date *
               </label>
-              <input
-                type="date"
+              <DatePicker
                 name="toDate"
                 required
+                min={formData.fromDate || undefined}
                 value={formData.toDate}
                 onChange={handleChange}
-                className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none"
+                placeholder="DD/MM/YYYY"
               />
             </div>
           </div>
@@ -290,7 +291,7 @@ export default function ApplyLeave() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-slate-900">Confirm Leave Submission</h3>
             <p className="text-xs text-slate-600">
-              Submit leave request ({formData.leaveType}) from <strong>{formData.fromDate}</strong> to <strong>{formData.toDate}</strong>?
+              Submit leave request ({formData.leaveType}) from <strong>{formatDate(formData.fromDate)}</strong> to <strong>{formatDate(formData.toDate)}</strong>?
             </p>
             <div className="flex justify-end space-x-3 pt-3">
               <button

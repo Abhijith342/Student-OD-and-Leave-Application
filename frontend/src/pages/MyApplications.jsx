@@ -1,3 +1,4 @@
+import { formatDateRange } from '../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { StatusBadge, StageBadge } from '../components/StatusBadge';
@@ -132,7 +133,7 @@ export default function MyApplications() {
                       {app.eventName || app.reason}
                     </td>
                     <td className="p-3.5 text-slate-600">
-                      {new Date(app.fromDate).toLocaleDateString()} - {new Date(app.toDate).toLocaleDateString()}
+                      {formatDateRange(app.fromDate, app.toDate)}
                     </td>
                     <td className="p-3.5">
                       <StageBadge stage={app.currentStage} />

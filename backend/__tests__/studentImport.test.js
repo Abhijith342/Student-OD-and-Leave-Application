@@ -6,6 +6,53 @@ const XLSX = require('xlsx');
 let adminToken, studentToken;
 
 beforeAll(async () => {
+  let dept = await prisma.department.findFirst({ where: { code: 'AI_DS' } });
+  if (!dept) {
+    dept = await prisma.department.create({
+      data: {
+        name: 'Artificial Intelligence and Data Science',
+        code: 'AI_DS',
+        active: true
+      }
+    });
+  }
+  const tutor = await prisma.staff.findFirst({ where: { role: 'TUTOR' } });
+  const advisor = await prisma.staff.findFirst({ where: { role: 'CLASS_ADVISOR' } });
+  if (tutor && !tutor.departmentId) {
+    await prisma.staff.update({ where: { id: tutor.id }, data: { departmentId: dept.id } });
+  }
+  if (advisor && !advisor.departmentId) {
+    await prisma.staff.update({ where: { id: advisor.id }, data: { departmentId: dept.id } });
+  }
+  const bcrypt = require('bcryptjs');
+  const passwordHash = await bcrypt.hash('Password123!', 10);
+
+  // Ensure test student exists
+  let testUser = await prisma.user.findUnique({ where: { username: '710724243001' } });
+  if (!testUser) {
+    testUser = await prisma.user.create({
+      data: {
+        username: '710724243001',
+        passwordHash,
+        role: 'STUDENT',
+        active: true,
+        studentProfile: {
+          create: {
+            registerNumber: '710724243001',
+            rollNumber: '22AD001',
+            name: 'Abinaya N',
+            email: '710724243001@drngpit.ac.in',
+            departmentId: dept.id,
+            year: 3,
+            section: 'A',
+            tutorId: tutor ? tutor.id : undefined,
+            classAdvisorId: advisor ? advisor.id : undefined
+          }
+        }
+      }
+    });
+  }
+
   // Login as Admin
   const adminRes = await request(app).post('/api/auth/login').send({
     username: 'admin',
@@ -22,6 +69,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await prisma.student.deleteMany({ where: { registerNumber: { in: ['710724243001', '710724249999'] } } });
+  await prisma.user.deleteMany({ where: { username: { in: ['710724243001', '710724249999'] } } });
+  await prisma.staff.updateMany({ data: { departmentId: null } });
+  await prisma.section.deleteMany({});
+  await prisma.academicYear.deleteMany({});
+  await prisma.department.deleteMany({});
   await prisma.$disconnect();
 });
 

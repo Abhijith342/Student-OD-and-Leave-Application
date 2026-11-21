@@ -17,7 +17,9 @@ import {
   GitFork,
   Upload,
   BarChart3,
-  ShieldCheck
+  ShieldCheck,
+  Calendar,
+  KeyRound
 } from 'lucide-react';
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
@@ -44,6 +46,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
   const staffNav = [
     { name: 'Dashboard Queue', path: '/dashboard', icon: ClipboardList },
+    { name: 'My Students', path: '/my-students', icon: Users },
+    { name: 'Daily OD / Leave', path: '/daily-status', icon: Calendar },
     { name: 'Notifications', path: '/notifications', icon: Bell },
     { name: 'Profile', path: '/profile', icon: User },
     { name: 'Settings', path: '/settings', icon: Settings },
@@ -52,6 +56,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const adminNav = [
     { name: 'Admin Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Students', path: '/admin/students', icon: Users },
+    { name: 'Password Resets', path: '/admin/password-resets', icon: KeyRound },
+    { name: 'Daily OD / Leave', path: '/daily-status', icon: Calendar },
     { name: 'Staff Members', path: '/admin/staff', icon: UserCheck },
     { name: 'Departments', path: '/admin/departments', icon: Building2 },
     { name: 'Import Students', path: '/admin/import-students', icon: Upload },
@@ -101,27 +107,24 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
           </div>
 
           {/* Navigation Links */}
-          <nav className="px-3 py-2 space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.name}
-                  to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center space-x-3 px-3.5 py-2.5 rounded-lg font-medium text-sm transition-all duration-150 ${
-                      isActive
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-900/30'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                    }`
-                  }
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.name}</span>
-                </NavLink>
-              );
-            })}
+          <nav className="px-3 space-y-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.path + item.name}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3 py-2.5 rounded-xl font-bold text-xs transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                      : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+                  }`
+                }
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                <span>{item.name}</span>
+              </NavLink>
+            ))}
           </nav>
         </div>
 
@@ -129,9 +132,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         <div className="p-4 border-t border-slate-800">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-rose-900/40 hover:text-rose-300 font-medium text-sm transition-colors border border-slate-700/50"
+            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl font-bold text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4 shrink-0" />
             <span>Sign Out</span>
           </button>
         </div>

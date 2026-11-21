@@ -14,15 +14,19 @@ import NotificationsPage from '../pages/NotificationsPage';
 import ProfilePage from '../pages/ProfilePage';
 import SettingsPage from '../pages/SettingsPage';
 import ApplicationDetailsPage from '../pages/ApplicationDetailsPage';
+import DailyStatusPage from '../pages/DailyStatusPage';
+import MyStudentsPage from '../pages/MyStudentsPage';
 
 // Admin Module Imports
 import AdminDashboard from '../pages/admin/AdminDashboard';
 import AdminStudents from '../pages/admin/AdminStudents';
+import AdminPasswordResets from '../pages/admin/AdminPasswordResets';
 import AdminStaff from '../pages/admin/AdminStaff';
 import AdminDepartments from '../pages/admin/AdminDepartments';
 import AdminImportStudents from '../pages/admin/AdminImportStudents';
 import AdminApplications from '../pages/admin/AdminApplications';
 import AdminAuditLogs from '../pages/admin/AdminAuditLogs';
+import AdminStructure from '../pages/admin/AdminStructure';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, token, loading } = useAuth();
@@ -132,6 +136,24 @@ export default function AppRoutes() {
         }
       />
 
+      <Route
+        path="/daily-status"
+        element={
+          <ProtectedRoute allowedRoles={['TUTOR', 'CLASS_ADVISOR', 'HOD', 'ADMIN', 'PRINCIPAL_OFFICE']}>
+            <DailyStatusPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/my-students"
+        element={
+          <ProtectedRoute allowedRoles={['TUTOR', 'CLASS_ADVISOR', 'HOD', 'ADMIN', 'PRINCIPAL_OFFICE']}>
+            <MyStudentsPage />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Admin Module Routes */}
       <Route
         path="/admin/dashboard"
@@ -147,6 +169,15 @@ export default function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['ADMIN']}>
             <AdminStudents />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/password-resets"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminPasswordResets />
           </ProtectedRoute>
         }
       />

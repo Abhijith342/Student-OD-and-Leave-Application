@@ -26,7 +26,7 @@ export function StageBadge({ stage }) {
   const stageLabels = {
     SUBMITTED: 'Submitted',
     TUTOR_PENDING: 'Tutor Review',
-    ADVISOR_PENDING: 'Parent Confirmation',
+    ADVISOR_PENDING: 'Class Advisor Review',
     HOD_PENDING: 'HOD Approval',
     PRINCIPAL_PENDING: 'Principal Office',
     COMPLETED: 'Completed',

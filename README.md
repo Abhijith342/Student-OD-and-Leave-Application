@@ -67,16 +67,17 @@ Open **two terminal windows**:
 - **System Administration Module (`role = ADMIN`)**: Full institutional management over Students, Staff, Departments, Academic Structure, Staff Assignments, Excel Imports, Application Monitoring, Reports, and Audit Trails.
 - **Strict Approval Separation**: Admin is a **system manager and observer ONLY** and is **NOT part of the OD/Leave approval chain**. Admin cannot approve or reject applications, maintaining complete audit integrity.
 - **Direct Excel Data Import**: Bulk onboard student records directly from `student_import_template.xlsx` with row-specific validation report.
-- **5-Step OD Approval Workflow**: Student submission → Tutor Review → Class Advisor Parent Telephonic Confirmation → HOD Approval → Principal Office Authorization & PDF Seal Stamp.
-- **4-Step Leave Approval Workflow**: Student submission → Tutor Review → Class Advisor Parent Telephonic Confirmation → HOD Approval.
+- **5-Step OD Approval Workflow**: Student submission → Tutor Review → Class Advisor Approval → HOD Approval → Principal Office Authorization & PDF Seal Stamp.
+- **4-Step Leave Approval Workflow**: Student submission → Tutor Review → Class Advisor Approval → HOD Final Approval.
+- **Class Advisor Review**: Class Advisors function identically to tutors, reviewing applications from students in their advised class, entering remarks, and approving or rejecting.
 - **Strict PDF Certificate Download Security**: Only the respective student who submitted an approved application can download their official PDF certificate. Staff members and unauthorized users are blocked (HTTP 403).
-- **Parent Contact & Telephonic Confirmation**: Parent phone numbers are prominently displayed across Class Advisor queues and application detail modals with direct phone call triggers.
+- **Parent Contact Information**: Parent phone numbers are securely retained on student records and profile info for general records and emergency contact.
 - **Immutable Audit Logging (`AuditLog`)**: Records administrative actions (student/staff creation, edits, status toggling, staff reassignments, password resets, Excel imports) with before/after state capture.
 
 ---
 
 
-## 📋 Approval Workflows (Untouched & Preserved)
+## 📋 Approval Workflows
 
 ### 1. On-Duty (OD) Workflow (5 Steps)
 ```
@@ -84,7 +85,7 @@ Student (Submits Application)
    ↓
 Tutor (Reviews: Approve / Reject + Remarks)
    ↓
-Class Advisor (Parent Telephonic Confirmation + Remarks → Forward to HOD)
+Class Advisor (Reviews: Approve / Reject + Remarks)
    ↓
 HOD (Reviews: Approve / Reject + Remarks)
    ↓
@@ -100,7 +101,7 @@ Student (Submits Application)
    ↓
 Tutor (Reviews: Approve / Reject + Remarks)
    ↓
-Class Advisor (Parent Telephonic Confirmation + Remarks → Forward to HOD)
+Class Advisor (Reviews: Approve / Reject + Remarks)
    ↓
 HOD (Final Approval / Reject)
    ↓

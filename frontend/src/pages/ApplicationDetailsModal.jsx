@@ -1,4 +1,6 @@
-import React from 'react';
+import StudentProfileModal from '../components/StudentProfileModal';
+import { formatDate, formatDateTime, formatDateRange } from '../utils/dateUtils';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge, StageBadge } from '../components/StatusBadge';
 import ApprovalTimeline from '../components/ApprovalTimeline';
@@ -11,6 +13,7 @@ export default function ApplicationDetailsModal({ application, onClose }) {
   const isOD = application.type === 'OD';
   const token = localStorage.getItem('token');
   const student = application.student;
+  const [showStudentProfile, setShowStudentProfile] = useState(false);
 
   const isApproved = application.status === 'APPROVED' || application.currentStage === 'COMPLETED';
   const isStudentOwner = user?.role === 'STUDENT' && user?.studentProfile?.id === application.studentId;
@@ -49,7 +52,7 @@ export default function ApplicationDetailsModal({ application, onClose }) {
             <div>
               <h3 className="font-bold text-base font-mono">#{application.applicationNumber}</h3>
               <p className="text-xs text-slate-400">
-                Submitted on {new Date(application.createdAt).toLocaleString()}
+                Submitted on {formatDateTime(application.createdAt)}
               </p>
             </div>
           </div>
@@ -100,9 +103,53 @@ export default function ApplicationDetailsModal({ application, onClose }) {
 
           {/* Student Info & Staff Hierarchy Card */}
           <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Student Profile & Assigned Staff Hierarchy
-            </h4>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
+                  {student?.profilePhoto ? (
+                    <img
+                      src={student.profilePhoto.startsWith('http') || student.profilePhoto.startsWith('blob:') ? student.profilePhoto : `http://localhost:5000${student.profilePhoto}`}
+                      alt={student.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  ) : (
+                    student?.name?.[0] || 'S'
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Student Profile & Mentors
+                  </h4>
+                  <div className="flex items-center space-x-1.5 mt-0.5">
+                    {student?.residenceType && (
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                        student.residenceType === 'HOSTEL'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}>
+                        {student.residenceType === 'HOSTEL' ? 'Hosteler 🏠' : 'Day Scholar 🚌'}
+                      </span>
+                    )}
+                    {student?.cutoff !== null && student?.cutoff !== undefined && (
+                      <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                        Cutoff: {student.cutoff}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowStudentProfile(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 font-bold text-xs rounded-xl transition-colors border border-blue-200 shadow-2xs"
+                title="View complete student academic and personal profile"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>View Full Student Profile</span>
+              </button>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div>
                 <span className="text-slate-400 block">Name:</span>
@@ -156,7 +203,7 @@ export default function ApplicationDetailsModal({ application, onClose }) {
               <div className="flex items-center space-x-2">
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span>
-                  <strong>Dates:</strong> {new Date(application.fromDate).toLocaleDateString()} to {new Date(application.toDate).toLocaleDateString()}
+                  <strong>Dates:</strong> {formatDateRange(application.fromDate, application.toDate)}
                 </span>
               </div>
 
@@ -190,31 +237,34 @@ export default function ApplicationDetailsModal({ application, onClose }) {
             )}
           </div>
 
-          {/* Parent Confirmation Record */}
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <div className="flex items-center space-x-2">
-              <UserCheck className="w-4 h-4 text-blue-600" />
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Parent Confirmation Record</h4>
-            </div>
-
-            {application.parentConfirmation ? (
-              <div className="text-xs space-y-1">
-                <p>
-                  <strong>Status:</strong>{' '}
-                  <span className={`font-bold ${application.parentConfirmation.isConfirmed ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {application.parentConfirmation.isConfirmed ? 'CONFIRMED BY PARENT' : 'NOT CONFIRMED'}
-                  </span>
-                </p>
-                <p><strong>Advisor:</strong> {application.parentConfirmation.advisor?.name || 'Class Advisor'}</p>
-                <p><strong>Timestamp:</strong> {new Date(application.parentConfirmation.confirmedAt).toLocaleString()}</p>
-                {application.parentConfirmation.remarks && (
-                  <p className="italic text-slate-600">"{application.parentConfirmation.remarks}"</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500 italic">Parent confirmation not yet recorded by Class Advisor.</p>
-            )}
-          </div>
+          {/* Class Advisor Review Record */}
+          {(() => {
+            const advisorHistory = application.approvalHistories?.find(h => h.role === 'CLASS_ADVISOR');
+            if (advisorHistory) {
+              return (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <UserCheck className="w-4 h-4 text-blue-600" />
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Class Advisor Review Record</h4>
+                  </div>
+                  <div className="text-xs space-y-1">
+                    <p>
+                      <strong>Decision:</strong>{' '}
+                      <span className={`font-bold ${advisorHistory.action === 'APPROVED' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {advisorHistory.action}
+                      </span>
+                    </p>
+                    <p><strong>Advisor:</strong> {advisorHistory.staff?.name || 'Class Advisor'}</p>
+                    <p><strong>Timestamp:</strong> {formatDateTime(advisorHistory.timestamp)}</p>
+                    {advisorHistory.remarks && (
+                      <p className="italic text-slate-600">"{advisorHistory.remarks}"</p>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           {/* Supporting Documents */}
           {application.documents && application.documents.length > 0 && (
@@ -254,6 +304,13 @@ export default function ApplicationDetailsModal({ application, onClose }) {
           </button>
         </div>
       </div>
+
+      <StudentProfileModal
+        student={student}
+        studentId={student?.id || application.studentId}
+        isOpen={showStudentProfile}
+        onClose={() => setShowStudentProfile(false)}
+      />
     </div>
   );
 }

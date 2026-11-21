@@ -18,6 +18,12 @@ enum Role {
   ADMIN
 }
 
+enum ResetStatus {
+  PENDING
+  RESET
+  REJECTED
+}
+
 enum ApplicationType {
   OD
   LEAVE
@@ -52,6 +58,7 @@ model User {
   email        String?       @unique
   passwordHash String
   role         Role
+  profilePhoto String?
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -59,6 +66,7 @@ model User {
   studentProfile Student?
   staffProfile   Staff?
   notifications  Notification[]
+  passwordResetRequests PasswordResetRequest[]
 }
 
 model Department {
@@ -70,6 +78,49 @@ model Department {
 
   students Student[]
   staff    Staff[]
+  years    AcademicYear[]
+  sections Section[]
+}
+
+model AcademicYear {
+  id           String     @id @default(uuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  year         Int        // 1, 2, 3, 4
+  name         String     // "1st Year", "2nd Year", "3rd Year", "4th Year"
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  sections     Section[]
+
+  @@unique([departmentId, year])
+  @@index([departmentId])
+}
+
+model Section {
+  id             String       @id @default(uuid())
+  name           String       // "A", "B", "C", etc.
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  tutorId        String?
+  tutor          Staff?       @relation("SectionTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  tutor2Id       String?
+  tutor2         Staff?       @relation("SectionTutor2", fields: [tutor2Id], references: [id], onDelete: SetNull)
+  classAdvisorId String?
+  classAdvisor   Staff?       @relation("SectionClassAdvisor", fields: [classAdvisorId], references: [id], onDelete: SetNull)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  students       Student[]
+
+  @@unique([academicYearId, name])
+  @@index([academicYearId])
+  @@index([departmentId])
+  @@index([tutorId])
+  @@index([tutor2Id])
+  @@index([classAdvisorId])
 }
 
 model Student {
@@ -82,30 +133,43 @@ model Student {
   email          String?     @unique
   studentPhone   String?
   parentPhone    String?
-  departmentId   String
-  department     Department  @relation(fields: [departmentId], references: [id])
+  residenceType  String?     @default("DAYSCHOLAR")
+  cutoff         Float?
+  profilePhoto   String?
+  departmentId   String?
+  department     Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   year           Int
   section        String
+  sectionId      String?
+  academicSection Section?   @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   tutorId        String?
-  tutor          Staff?      @relation("StudentTutor", fields: [tutorId], references: [id])
+  tutor          Staff?      @relation("StudentTutor", fields: [tutorId], references: [id], onDelete: SetNull)
   classAdvisorId String?
-  classAdvisor   Staff?      @relation("StudentClassAdvisor", fields: [classAdvisorId], references: [id])
+  classAdvisor   Staff?      @relation("StudentClassAdvisor", fields: [classAdvisorId], references: [id], onDelete: SetNull)
 
   applications   Application[]
+
+  @@index([departmentId])
+  @@index([departmentId, year, section])
+  @@index([sectionId])
 }
 
 model Staff {
-  id           String     @id @default(uuid())
-  userId       String     @unique
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String      @id @default(uuid())
+  userId       String      @unique
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
-  employeeId   String     @unique
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
+  employeeId   String      @unique
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   role         Role
+  profilePhoto String?
 
   tutoredStudents    Student[]            @relation("StudentTutor")
   advisedStudents    Student[]            @relation("StudentClassAdvisor")
+  tutoredSections    Section[]            @relation("SectionTutor")
+  tutoredSections2   Section[]            @relation("SectionTutor2")
+  advisedSections    Section[]            @relation("SectionClassAdvisor")
   approvalHistories  ApprovalHistory[]
   parentConfirmations ParentConfirmation[]
 }
@@ -190,4 +254,23 @@ model AuditLog {
   previousValue String?
   newValue      String?
   createdAt     DateTime @default(now())
+}
+
+model PasswordResetRequest {
+  id             String      @id @default(uuid())
+  registerNumber String
+  studentName    String?
+  studentPhone   String?
+  email          String?
+  reason         String?
+  status         ResetStatus @default(PENDING)
+  requestedAt    DateTime    @default(now())
+  resolvedAt     DateTime?
+  adminRemarks   String?
+  resolvedBy     String?
+  userId         String?
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([registerNumber])
+  @@index([status])
 }

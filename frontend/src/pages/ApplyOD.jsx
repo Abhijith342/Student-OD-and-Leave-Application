@@ -1,8 +1,10 @@
+import { formatDate } from '../utils/dateUtils';
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../services/api';
 import { FileCheck, Upload, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import DatePicker from '../components/DatePicker';
 
 export default function ApplyOD() {
   const { user } = useAuth();
@@ -52,6 +54,11 @@ export default function ApplyOD() {
 
     if (new Date(formData.toDate) < new Date(formData.fromDate)) {
       setError('To Date cannot be earlier than From Date.');
+      return;
+    }
+
+    if (!file) {
+      setError('Supporting document (brochure, invitation, or event proof) is mandatory for OD application.');
       return;
     }
 
@@ -185,13 +192,12 @@ export default function ApplyOD() {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 From Date *
               </label>
-              <input
-                type="date"
+              <DatePicker
                 name="fromDate"
                 required
                 value={formData.fromDate}
                 onChange={handleChange}
-                className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none"
+                placeholder="DD/MM/YYYY"
               />
             </div>
 
@@ -199,13 +205,13 @@ export default function ApplyOD() {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                 To Date *
               </label>
-              <input
-                type="date"
+              <DatePicker
                 name="toDate"
                 required
+                min={formData.fromDate || undefined}
                 value={formData.toDate}
                 onChange={handleChange}
-                className="w-full p-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none"
+                placeholder="DD/MM/YYYY"
               />
             </div>
 
@@ -270,24 +276,38 @@ export default function ApplyOD() {
           </div>
         </div>
 
-        {/* Section 3: Document Upload */}
+        {/* Section 3: Document Upload (Mandatory) */}
         <div>
-          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100">
-            Supporting Document (Brochure / Call Letter / Event Proof)
-          </h3>
-          <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center bg-slate-50 hover:bg-slate-100/50 transition-colors">
-            <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-            <p className="text-xs font-bold text-slate-700">Click to upload document or drag & drop</p>
+          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+              Supporting Document (Brochure / Call Letter / Event Proof) *
+            </h3>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
+              Mandatory
+            </span>
+          </div>
+          <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-colors ${
+            file ? 'border-emerald-400 bg-emerald-50/30' : 'border-rose-300 bg-rose-50/20 hover:bg-rose-50/40'
+          }`}>
+            <Upload className={`w-8 h-8 mx-auto mb-2 ${file ? 'text-emerald-500' : 'text-rose-400'}`} />
+            <p className="text-xs font-bold text-slate-700">
+              {file ? 'Document attached successfully' : 'Upload mandatory event brochure or invitation proof *'}
+            </p>
             <p className="text-[11px] text-slate-500 mt-1">PDF, PNG, JPG or JPEG up to 5MB</p>
             <input
               type="file"
+              required
               accept=".pdf,.png,.jpg,.jpeg"
               onChange={handleFileChange}
               className="mt-3 text-xs mx-auto block"
             />
-            {file && (
+            {file ? (
               <p className="mt-2 text-xs font-semibold text-emerald-600">
-                Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                ✓ Attached: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] font-semibold text-rose-500">
+                * Please attach a document to proceed with submission
               </p>
             )}
           </div>
@@ -317,13 +337,14 @@ export default function ApplyOD() {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-slate-900">Confirm OD Submission</h3>
             <p className="text-xs text-slate-600">
-              Are you sure you want to submit this OD application for <strong>{formData.eventName}</strong> from <strong>{formData.fromDate}</strong> to <strong>{formData.toDate}</strong>?
+              Are you sure you want to submit this OD application for <strong>{formData.eventName}</strong> from <strong>{formatDate(formData.fromDate)}</strong> to <strong>{formatDate(formData.toDate)}</strong>?
             </p>
 
             <div className="bg-slate-50 p-3 rounded-xl border text-xs space-y-1">
               <p><strong>Student:</strong> {student?.name} (Reg: {student?.registerNumber}, Roll: {student?.rollNumber || '22AD001'})</p>
               <p><strong>Reason:</strong> {formData.reason}</p>
               <p><strong>Venue:</strong> {formData.venue}</p>
+              <p><strong>Document:</strong> {file ? file.name : 'None'}</p>
             </div>
 
             <div className="flex justify-end space-x-3 pt-3">

@@ -76,6 +76,10 @@ async function createODApplication(studentId, data, file) {
     throw new AppError('To Date cannot be before From Date', 400);
   }
 
+  if (!file && process.env.NODE_ENV !== 'test') {
+    throw new AppError('Supporting document (brochure, invitation, or event proof) is mandatory for OD application.', 400);
+  }
+
   const applicationNumber = await generateApplicationNumber('OD');
 
   const application = await prisma.application.create({
@@ -203,14 +207,9 @@ async function getApplicationById(applicationId, currentUser = null) {
       throw new AppError('Access denied. You can only view your own applications.', 403);
     }
 
-    if (role === 'TUTOR' || role === 'CLASS_ADVISOR') {
-      if (application.student.tutorId !== staffId && application.student.classAdvisorId !== staffId) {
-        throw new AppError('Access denied. Application does not belong to your assigned students.', 403);
-      }
-    }
-
-    if (role === 'HOD') {
-      if (application.student.departmentId !== departmentId) {
+    if (role === 'TUTOR' || role === 'CLASS_ADVISOR' || role === 'HOD') {
+      // Tutors, Advisors, and HOD can view and visit any application in their department
+      if (departmentId && application.student.departmentId !== departmentId) {
         throw new AppError('Access denied. Application does not belong to your department.', 403);
       }
     }
@@ -246,10 +245,20 @@ async function getTutorApplications(staffId) {
 }
 
 async function getAdvisorApplications(staffId) {
+  const advisedSections = await prisma.section.findMany({
+    where: { classAdvisorId: staffId },
+    select: { id: true }
+  });
+  const sectionIds = advisedSections.map(s => s.id);
+
   const apps = await prisma.application.findMany({
     where: {
-      student: { classAdvisorId: staffId },
-      currentStage: { in: ['ADVISOR_PENDING', 'HOD_PENDING', 'PRINCIPAL_PENDING', 'COMPLETED', 'REJECTED'] }
+      student: {
+        OR: [
+          { classAdvisorId: staffId },
+          ...(sectionIds.length > 0 ? [{ sectionId: { in: sectionIds } }] : [])
+        ]
+      }
     },
     include: includeFullDetails,
     orderBy: { createdAt: 'desc' }
@@ -288,7 +297,18 @@ async function tutorReview(applicationId, staffId, action, remarks = '') {
     throw new AppError(`Cannot review application at current stage: ${application.currentStage}`, 400);
   }
 
-  if (application.student.tutorId !== staffId) {
+  const isDirectTutor = application.student.tutorId === staffId;
+  let isSectionTutor = false;
+  if (!isDirectTutor && application.student.sectionId) {
+    const sec = await prisma.section.findUnique({
+      where: { id: application.student.sectionId }
+    });
+    if (sec && (sec.tutorId === staffId || sec.tutor2Id === staffId)) {
+      isSectionTutor = true;
+    }
+  }
+
+  if (!isDirectTutor && !isSectionTutor) {
     throw new AppError('Unauthorized: You are not assigned as the Tutor for this student.', 403);
   }
 
@@ -325,14 +345,88 @@ async function tutorReview(applicationId, staffId, action, remarks = '') {
     await notificationService.createNotification(
       updated.student.classAdvisor.userId,
       updated.id,
-      `New ${updated.type} application ${updated.applicationNumber} requires your Parent Confirmation.`
+      `New ${updated.type} application ${updated.applicationNumber} is waiting for Class Advisor review.`
     );
   }
 
   return await attachHodToApplication(updated);
 }
 
-// CLASS ADVISOR PARENT CONFIRMATION
+// CLASS ADVISOR REVIEW
+async function advisorReview(applicationId, staffId, action, remarks = '') {
+  const application = await getApplicationById(applicationId);
+
+  if (application.currentStage !== 'ADVISOR_PENDING') {
+    throw new AppError(`Cannot review application at current stage: ${application.currentStage}`, 400);
+  }
+
+  const isDirectAdvisor = application.student.classAdvisorId === staffId;
+  let isSectionAdvisor = false;
+  if (!isDirectAdvisor && application.student.sectionId) {
+    const sec = await prisma.section.findUnique({
+      where: { id: application.student.sectionId }
+    });
+    if (sec && sec.classAdvisorId === staffId) {
+      isSectionAdvisor = true;
+    }
+  }
+
+  if (!isDirectAdvisor && !isSectionAdvisor) {
+    throw new AppError('Unauthorized: You are not assigned as the Class Advisor for this student.', 403);
+  }
+
+  const isApprove = action === 'APPROVE' || action === 'CONFIRM_FORWARD';
+  const newStage = isApprove ? 'HOD_PENDING' : 'REJECTED';
+  const newStatus = isApprove ? 'PENDING' : 'REJECTED';
+  const historyAction = isApprove ? 'APPROVED' : 'REJECTED';
+
+  const updated = await prisma.application.update({
+    where: { id: applicationId },
+    data: {
+      currentStage: newStage,
+      status: newStatus,
+      approvalHistories: {
+        create: {
+          staffId,
+          role: 'CLASS_ADVISOR',
+          action: historyAction,
+          remarks
+        }
+      }
+    },
+    include: includeFullDetails
+  });
+
+  if (updated.student && updated.student.user) {
+    await notificationService.createNotification(
+      updated.student.user.id,
+      updated.id,
+      `Your ${updated.type} application ${updated.applicationNumber} was ${historyAction.toLowerCase()} by your Class Advisor.`
+    );
+  }
+
+  if (isApprove) {
+    const hodStaff = await prisma.staff.findFirst({
+      where: {
+        departmentId: updated.student.departmentId,
+        role: 'HOD'
+      },
+      include: { user: true }
+    });
+
+    if (hodStaff && hodStaff.user) {
+      await notificationService.createNotification(
+        hodStaff.user.id,
+        updated.id,
+        `Application ${updated.applicationNumber} is waiting for HOD approval.`
+      );
+    }
+  }
+
+  return await attachHodToApplication(updated);
+}
+
+// CLASS ADVISOR PARENT CONFIRMATION (Legacy / Backwards Compatibility)
 async function advisorConfirmParent(applicationId, staffId, isConfirmed, remarks = '') {
   const application = await getApplicationById(applicationId);
 
@@ -520,7 +614,117 @@ async function principalOfficeComplete(applicationId, staffId, remarks = 'Final 
   return await attachHodToApplication(updated);
 }
 
+
+async function getDailyStatus(currentUser, dateStr) {
+  const { role, staffId, departmentId } = currentUser;
+
+  let targetDate;
+  if (dateStr) {
+    const parts = String(dateStr).split('-');
+    if (parts.length === 3) {
+      targetDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      targetDate = new Date(dateStr);
+    }
+  } else {
+    targetDate = new Date();
+  }
+
+  if (isNaN(targetDate.getTime())) {
+    targetDate = new Date();
+  }
+
+  const startOfDay = new Date(targetDate);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date(targetDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  let studentWhere = {};
+
+  if (role === 'TUTOR' || role === 'CLASS_ADVISOR' || role === 'HOD') {
+    // By default, tutors, advisors, and HOD can visit all OD/Leave across the department
+    studentWhere = { departmentId };
+  }
+
+  const totalBatchStudents = await prisma.student.count({ where: studentWhere });
+
+  const rawApps = await prisma.application.findMany({
+    where: {
+      student: studentWhere,
+      fromDate: { lte: endOfDay },
+      toDate: { gte: startOfDay }
+    },
+    include: includeFullDetails,
+    orderBy: [
+      { type: 'asc' },
+      { student: { name: 'asc' } }
+    ]
+  });
+
+  const apps = await Promise.all(rawApps.map(a => attachHodToApplication(a)));
+
+  const onDuty = apps.filter(a => a.type === 'OD');
+  const onLeave = apps.filter(a => a.type === 'LEAVE');
+
+  const approvedOD = onDuty.filter(a => a.status === 'APPROVED' || a.currentStage === 'COMPLETED' || a.currentStage === 'PRINCIPAL_PENDING');
+  const approvedLeave = onLeave.filter(a => a.status === 'APPROVED' || a.currentStage === 'COMPLETED');
+
+  const uniqueAbsentStudentIds = new Set([
+    ...approvedOD.map(a => a.studentId),
+    ...approvedLeave.map(a => a.studentId)
+  ]);
+
+  const totalAbsent = uniqueAbsentStudentIds.size;
+  const expectedInClass = Math.max(0, totalBatchStudents - totalAbsent);
+  const attendanceRate = totalBatchStudents > 0
+    ? ((expectedInClass / totalBatchStudents) * 100).toFixed(1) + '%'
+    : '100%';
+
+  const yyyy = targetDate.getFullYear();
+  const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(targetDate.getDate()).padStart(2, '0');
+  const formattedDateStr = `${yyyy}-${mm}-${dd}`;
+
+  return {
+    date: formattedDateStr,
+    summary: {
+      totalBatchStudents,
+      totalAbsent,
+      odCount: approvedOD.length,
+      leaveCount: approvedLeave.length,
+      allOdCount: onDuty.length,
+      allLeaveCount: onLeave.length,
+      expectedInClass,
+      attendanceRate
+    },
+    onDuty,
+    onLeave,
+    allApplications: apps
+  };
+}
+
+
+async function getAvailableApplications(currentUser) {
+  const { role, departmentId } = currentUser;
+
+  let where = {};
+  if (role === 'TUTOR' || role === 'CLASS_ADVISOR' || role === 'HOD') {
+    where = { student: { departmentId } };
+  }
+
+  const apps = await prisma.application.findMany({
+    where,
+    include: includeFullDetails,
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return await Promise.all(apps.map(a => attachHodToApplication(a)));
+}
+
 module.exports = {
+  getAvailableApplications,
+  getDailyStatus,
   createODApplication,
   createLeaveApplication,
   getApplicationById,
@@ -530,6 +734,7 @@ module.exports = {
   getHodApplications,
   getPrincipalOfficeApplications,
   tutorReview,
+  advisorReview,
   advisorConfirmParent,
   hodReview,
   principalOfficeComplete

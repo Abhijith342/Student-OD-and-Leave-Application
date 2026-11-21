@@ -1,3 +1,4 @@
+import { formatDateTime } from '../utils/dateUtils';
 import React from 'react';
 import { CheckCircle2, Clock, XCircle, Circle } from 'lucide-react';
 
@@ -9,7 +10,7 @@ export default function ApprovalTimeline({ application }) {
   const odSteps = [
     { key: 'SUBMITTED', title: 'Application Submitted', role: 'STUDENT' },
     { key: 'TUTOR_PENDING', title: 'Tutor Approval', role: 'TUTOR' },
-    { key: 'ADVISOR_PENDING', title: 'Parent Confirmation', role: 'CLASS_ADVISOR' },
+    { key: 'ADVISOR_PENDING', title: 'Class Advisor Review', role: 'CLASS_ADVISOR' },
     { key: 'HOD_PENDING', title: 'HOD Approval', role: 'HOD' },
     { key: 'PRINCIPAL_PENDING', title: 'Principal Office Seal', role: 'PRINCIPAL_OFFICE' },
     { key: 'COMPLETED', title: 'OD Completed', role: 'SYSTEM' },
@@ -18,7 +19,7 @@ export default function ApprovalTimeline({ application }) {
   const leaveSteps = [
     { key: 'SUBMITTED', title: 'Application Submitted', role: 'STUDENT' },
     { key: 'TUTOR_PENDING', title: 'Tutor Approval', role: 'TUTOR' },
-    { key: 'ADVISOR_PENDING', title: 'Parent Confirmation', role: 'CLASS_ADVISOR' },
+    { key: 'ADVISOR_PENDING', title: 'Class Advisor Review', role: 'CLASS_ADVISOR' },
     { key: 'HOD_PENDING', title: 'HOD Approval & Final', role: 'HOD' },
     { key: 'COMPLETED', title: 'Leave Approved', role: 'SYSTEM' },
   ];
@@ -27,7 +28,6 @@ export default function ApprovalTimeline({ application }) {
 
   // Map application audit history to find details for each step
   const histories = application.approvalHistories || [];
-  const parentConf = application.parentConfirmation;
 
   // Determine state of each step index
   const stageOrder = steps.map(s => s.key);
@@ -47,7 +47,7 @@ export default function ApprovalTimeline({ application }) {
 
           if (step.key === 'SUBMITTED') {
             stepStatus = 'COMPLETED';
-            extraDetail = `Submitted on ${new Date(application.createdAt).toLocaleString()}`;
+            extraDetail = `Submitted on ${formatDateTime(application.createdAt)}`;
           } else if (step.key === 'TUTOR_PENDING') {
             historyMatch = histories.find(h => h.role === 'TUTOR');
             if (historyMatch) {
@@ -58,12 +58,9 @@ export default function ApprovalTimeline({ application }) {
           } else if (step.key === 'ADVISOR_PENDING') {
             historyMatch = histories.find(h => h.role === 'CLASS_ADVISOR');
             if (historyMatch) {
-              stepStatus = 'COMPLETED';
+              stepStatus = historyMatch.action === 'APPROVED' ? 'COMPLETED' : 'REJECTED';
             } else if (application.currentStage === 'ADVISOR_PENDING') {
               stepStatus = 'CURRENT';
-            }
-            if (parentConf) {
-              extraDetail = `Parent ${parentConf.isConfirmed ? 'Confirmed' : 'Not Confirmed'} by Advisor ${parentConf.advisor?.name || ''} on ${new Date(parentConf.confirmedAt).toLocaleDateString()}`;
             }
           } else if (step.key === 'HOD_PENDING') {
             historyMatch = histories.find(h => h.role === 'HOD');
@@ -146,7 +143,7 @@ export default function ApprovalTimeline({ application }) {
                       <p className="italic text-slate-500 mt-0.5">"{historyMatch.remarks}"</p>
                     )}
                     <p className="text-[10px] text-slate-400 mt-1">
-                      {new Date(historyMatch.timestamp).toLocaleString()}
+                      {formatDateTime(historyMatch.timestamp)}
                     </p>
                   </div>
                 )}

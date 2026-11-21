@@ -1,3 +1,4 @@
+import { formatDateTime } from '../utils/dateUtils';
 import React from 'react';
 import { useNotifications } from '../context/NotificationContext';
 import { Bell, CheckCheck, Trash2, X } from 'lucide-react';
@@ -60,7 +61,7 @@ export default function NotificationsPage() {
                 <div>
                   <p className="text-xs text-slate-900">{n.message}</p>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    {new Date(n.createdAt).toLocaleString()}
+                    {formatDateTime(n.createdAt)}
                   </p>
                 </div>
               </div>

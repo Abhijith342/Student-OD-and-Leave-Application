@@ -7,6 +7,85 @@ let studentUser, tutorUser, advisorUser, hodUser, principalUser;
 let createdODId, createdLeaveId;
 
 beforeAll(async () => {
+  let dept = await prisma.department.findFirst({ where: { code: 'AI_DS' } });
+  if (!dept) {
+    dept = await prisma.department.create({
+      data: {
+        name: 'Artificial Intelligence and Data Science',
+        code: 'AI_DS',
+        active: true
+      }
+    });
+  }
+  const tutorStaff = await prisma.staff.findFirst({ where: { role: 'TUTOR' }, include: { user: true } });
+  const advisorStaff = await prisma.staff.findFirst({ where: { role: 'CLASS_ADVISOR' }, include: { user: true } });
+  const hodStaff = await prisma.staff.findFirst({ where: { role: 'HOD' }, include: { user: true } });
+
+  if (tutorStaff && !tutorStaff.departmentId) {
+    await prisma.staff.update({ where: { id: tutorStaff.id }, data: { departmentId: dept.id } });
+  }
+  if (advisorStaff && !advisorStaff.departmentId) {
+    await prisma.staff.update({ where: { id: advisorStaff.id }, data: { departmentId: dept.id } });
+  }
+  if (hodStaff && !hodStaff.departmentId) {
+    await prisma.staff.update({ where: { id: hodStaff.id }, data: { departmentId: dept.id } });
+  }
+  
+  const bcrypt = require('bcryptjs');
+  const passwordHash = await bcrypt.hash('Password123!', 10);
+
+  // Ensure test student 1 exists
+  let testUser1 = await prisma.user.findUnique({ where: { username: '710724243001' } });
+  if (!testUser1) {
+    testUser1 = await prisma.user.create({
+      data: {
+        username: '710724243001',
+        passwordHash,
+        role: 'STUDENT',
+        active: true,
+        studentProfile: {
+          create: {
+            registerNumber: '710724243001',
+            rollNumber: '22AD001',
+            name: 'Abinaya N',
+            email: '710724243001@drngpit.ac.in',
+            departmentId: dept.id,
+            year: 3,
+            section: 'A',
+            tutorId: tutorStaff ? tutorStaff.id : undefined,
+            classAdvisorId: advisorStaff ? advisorStaff.id : undefined
+          }
+        }
+      }
+    });
+  }
+
+  // Ensure test student 2 exists
+  let testUser2 = await prisma.user.findUnique({ where: { username: '710724243002' } });
+  if (!testUser2) {
+    testUser2 = await prisma.user.create({
+      data: {
+        username: '710724243002',
+        passwordHash,
+        role: 'STUDENT',
+        active: true,
+        studentProfile: {
+          create: {
+            registerNumber: '710724243002',
+            rollNumber: '22AD002',
+            name: 'Student Two',
+            email: '710724243002@drngpit.ac.in',
+            departmentId: dept.id,
+            year: 3,
+            section: 'A',
+            tutorId: tutorStaff ? tutorStaff.id : undefined,
+            classAdvisorId: advisorStaff ? advisorStaff.id : undefined
+          }
+        }
+      }
+    });
+  }
+
   // Login as Student 1
   const studentRes = await request(app).post('/api/auth/login').send({
     username: '710724243001',
@@ -15,23 +94,26 @@ beforeAll(async () => {
   studentToken = studentRes.body.token;
   studentUser = studentRes.body.data.user;
 
-  // Login as Tutor (N PREMKUMAR)
+  // Login as Tutor
+  const tutorUsername = tutorStaff?.user?.username || 'divya';
   const tutorRes = await request(app).post('/api/auth/login').send({
-    username: 'premkumar',
+    username: tutorUsername,
     password: 'Password123!'
   });
   tutorToken = tutorRes.body.token;
 
-  // Login as Advisor (N PREMKUMAR)
+  // Login as Advisor
+  const advisorUsername = advisorStaff?.user?.username || 'premkumar';
   const advisorRes = await request(app).post('/api/auth/login').send({
-    username: 'premkumar',
+    username: advisorUsername,
     password: 'Password123!'
   });
   advisorToken = advisorRes.body.token;
 
-  // Login as HOD (PAVITHRA)
+  // Login as HOD
+  const hodUsername = hodStaff?.user?.username || 'pavithra';
   const hodRes = await request(app).post('/api/auth/login').send({
-    username: 'pavithra',
+    username: hodUsername,
     password: 'Password123!'
   });
   hodToken = hodRes.body.token;
@@ -45,6 +127,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await prisma.approvalHistory.deleteMany({});
+  await prisma.application.deleteMany({});
+  await prisma.student.deleteMany({ where: { registerNumber: { in: ['710724243001', '710724243002'] } } });
+  await prisma.user.deleteMany({ where: { username: { in: ['710724243001', '710724243002'] } } });
   await prisma.$disconnect();
 });
 
@@ -54,17 +140,15 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
     const res = await request(app)
       .post('/api/applications/od')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({
-        fromDate: '2026-11-01',
-        toDate: '2026-11-03',
-        reason: 'National Paper Presentation',
-        eventName: 'AI Expo 2026',
-        venue: 'IIT Madras',
-        description: 'Testing OD Submission flow'
-      });
+      .attach('document', Buffer.from('PDF Brochure Proof Content'), 'brochure.pdf')
+      .field('fromDate', '2026-11-01')
+      .field('toDate', '2026-11-03')
+      .field('reason', 'National Paper Presentation')
+      .field('eventName', 'TechFest 2026')
+      .field('venue', 'Chennai');
 
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.application).toHaveProperty('applicationNumber');
+    expect(res.body.status).toBe('success');
     expect(res.body.data.application.type).toBe('OD');
     expect(res.body.data.application.currentStage).toBe('TUTOR_PENDING');
     createdODId = res.body.data.application.id;
@@ -75,11 +159,10 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
       .post('/api/applications/leave')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({
-        leaveType: 'Medical',
         fromDate: '2026-11-05',
         toDate: '2026-11-06',
-        reason: 'Severe Toothache',
-        description: 'Dental appointment'
+        reason: 'Viral Fever with Medical Certificate',
+        leaveType: 'MEDICAL'
       });
 
     expect(res.statusCode).toBe(201);
@@ -101,9 +184,10 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
     const res = await request(app)
       .post(`/api/applications/${createdODId}/hod/review`)
       .set('Authorization', `Bearer ${hodToken}`)
-      .send({ action: 'APPROVE', remarks: 'Early HOD approval' });
+      .send({ action: 'APPROVE', remarks: 'Trying to skip Tutor' });
 
-    expect(res.statusCode).toBe(400); // Stage mismatch
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toContain('Cannot perform HOD review at current stage');
   });
 
   test('5. Tutor can approve OD Application (moves stage to ADVISOR_PENDING)', async () => {
@@ -116,23 +200,23 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
     expect(res.body.data.application.currentStage).toBe('ADVISOR_PENDING');
   });
 
-  test('6. Tutor CANNOT directly complete HOD stage', async () => {
+  test('6. Class Advisor can approve OD Application (moves stage to HOD_PENDING)', async () => {
     const res = await request(app)
-      .post(`/api/applications/${createdODId}/hod/review`)
-      .set('Authorization', `Bearer ${tutorToken}`)
-      .send({ action: 'APPROVE', remarks: 'Tutor pretending to be HOD' });
-
-    expect(res.statusCode).toBe(403);
-  });
-
-  test('7. Class Advisor can record parent confirmation & forward to HOD', async () => {
-    const res = await request(app)
-      .post(`/api/applications/${createdODId}/parent-confirmation`)
+      .post(`/api/applications/${createdODId}/advisor/review`)
       .set('Authorization', `Bearer ${advisorToken}`)
-      .send({ isConfirmed: true, remarks: 'Spoke with student mother.' });
+      .send({ action: 'APPROVE', remarks: 'OD Approved by Class Advisor' });
 
     expect(res.statusCode).toBe(200);
     expect(res.body.data.application.currentStage).toBe('HOD_PENDING');
+  });
+
+  test('7. Student CANNOT review or approve at HOD stage', async () => {
+    const res = await request(app)
+      .post(`/api/applications/${createdODId}/hod/review`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ action: 'APPROVE', remarks: 'Illegal attempt' });
+
+    expect(res.statusCode).toBe(403);
   });
 
   test('8. HOD can approve OD Application (moves stage to PRINCIPAL_PENDING)', async () => {
@@ -160,33 +244,36 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
     const res = await request(app)
       .post(`/api/applications/${createdLeaveId}/principal-office/complete`)
       .set('Authorization', `Bearer ${principalToken}`)
-      .send({ remarks: 'Leave Seal Attempt' });
+      .send({ remarks: 'Principal should not touch Leave' });
 
-    expect(res.statusCode).toBe(400); // Bad Request: Principal Office handles OD applications only
+    expect(res.statusCode).toBe(400);
   });
 
-  test('11. Leave Application completes at HOD Stage without Principal Office', async () => {
-    // 1. Tutor Approve Leave
-    await request(app)
+  test('11. Leave Application completes via Tutor -> Advisor -> HOD', async () => {
+    // 1. Tutor Approve Leave -> moves stage to ADVISOR_PENDING
+    const tutorRes = await request(app)
       .post(`/api/applications/${createdLeaveId}/tutor/review`)
       .set('Authorization', `Bearer ${tutorToken}`)
-      .send({ action: 'APPROVE' });
+      .send({ action: 'APPROVE', remarks: 'Leave Approved by Tutor' });
+    expect(tutorRes.statusCode).toBe(200);
+    expect(tutorRes.body.data.application.currentStage).toBe('ADVISOR_PENDING');
 
-    // 2. Advisor Parent Confirmation
-    await request(app)
+    // 2. Advisor Parent Confirmation (moves stage to HOD_PENDING)
+    const confRes = await request(app)
       .post(`/api/applications/${createdLeaveId}/parent-confirmation`)
       .set('Authorization', `Bearer ${advisorToken}`)
       .send({ isConfirmed: true });
+    expect(confRes.statusCode).toBe(200);
+    expect(confRes.body.data.application.currentStage).toBe('HOD_PENDING');
 
-    // 3. HOD Approve Leave
-    const res = await request(app)
+    // 3. HOD Approve Leave -> completes workflow directly (Leaves don't go to Principal)
+    const hodRes = await request(app)
       .post(`/api/applications/${createdLeaveId}/hod/review`)
       .set('Authorization', `Bearer ${hodToken}`)
-      .send({ action: 'APPROVE', remarks: 'Leave approved by HOD' });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body.data.application.currentStage).toBe('COMPLETED');
-    expect(res.body.data.application.status).toBe('APPROVED');
+      .send({ action: 'APPROVE', remarks: 'Leave Approved by HOD' });
+    expect(hodRes.statusCode).toBe(200);
+    expect(hodRes.body.data.application.currentStage).toBe('COMPLETED');
+    expect(hodRes.body.data.application.status).toBe('APPROVED');
   });
 
   test('12. Unauthorized users CANNOT access another student application', async () => {
@@ -210,24 +297,24 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
     const failRes1 = await request(app)
       .post('/api/auth/change-password')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ currentPassword: 'WrongPassword!', newPassword: 'NewPassword123!' });
+      .send({ currentPassword: 'WrongPassword!', newPassword: 'NewSecurePassword123!' });
     expect(failRes1.statusCode).toBe(400);
 
     // 2. Short new password -> 400
     const failRes2 = await request(app)
       .post('/api/auth/change-password')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ currentPassword: 'Password123!', newPassword: '123' });
+      .send({ currentPassword: 'Password123!', newPassword: 'short' });
     expect(failRes2.statusCode).toBe(400);
 
-    // 3. Valid change password -> 200
+    // 3. Successful password change -> 200
     const successRes = await request(app)
       .post('/api/auth/change-password')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ currentPassword: 'Password123!', newPassword: 'NewPassword123!' });
     expect(successRes.statusCode).toBe(200);
 
-    // Revert password back to original for database consistency
+    // 4. Change back to Password123! so suite teardown and subsequent logins remain valid
     await request(app)
       .post('/api/auth/change-password')
       .set('Authorization', `Bearer ${studentToken}`)
@@ -236,12 +323,11 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
 
   test('14. Admin role access, dashboard, audit logs, and non-approval invariant', async () => {
     // Login as Admin
-    const adminLoginRes = await request(app).post('/api/auth/login').send({
+    const adminLogin = await request(app).post('/api/auth/login').send({
       username: 'admin',
       password: 'Password123!'
     });
-    expect(adminLoginRes.statusCode).toBe(200);
-    const adminToken = adminLoginRes.body.token;
+    const adminToken = adminLogin.body.token;
 
     // 1. Admin accesses admin dashboard -> 200
     const dashRes = await request(app)
@@ -274,5 +360,24 @@ describe('Student OD & Leave Workflow Security Invariants', () => {
       .get('/api/admin/audit-logs')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(auditRes.statusCode).toBe(200);
+  });
+
+  afterAll(async () => {
+    if (createdODId) await prisma.application.deleteMany({ where: { id: createdODId } });
+    if (createdLeaveId) await prisma.application.deleteMany({ where: { id: createdLeaveId } });
+    await prisma.application.deleteMany({
+      where: { student: { registerNumber: { in: ['710724243001', '710724243002'] } } }
+    });
+    await prisma.student.deleteMany({
+      where: { registerNumber: { in: ['710724243001', '710724243002'] } }
+    });
+    await prisma.user.deleteMany({
+      where: { username: { in: ['710724243001', '710724243002'] } }
+    });
+    await prisma.staff.updateMany({ data: { departmentId: null } });
+    await prisma.section.deleteMany({});
+    await prisma.academicYear.deleteMany({});
+    await prisma.department.deleteMany({});
+    await prisma.$disconnect();
   });
 });

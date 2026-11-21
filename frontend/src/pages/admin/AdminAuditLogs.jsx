@@ -1,3 +1,4 @@
+import { formatDateTime } from '../../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { 
@@ -141,7 +142,7 @@ export default function AdminAuditLogs() {
                 {auditLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-3.5 text-slate-500 whitespace-nowrap">
-                      {new Date(log.createdAt).toLocaleString()}
+                      {formatDateTime(log.createdAt)}
                     </td>
                     <td className="p-3.5 font-bold font-mono text-slate-900">{log.adminUsername}</td>
                     <td className="p-3.5">

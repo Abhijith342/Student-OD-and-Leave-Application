@@ -2,6 +2,23 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
 
+function formatDateDDMMYYYY(dateInput) {
+  if (!dateInput) return '-';
+  if (typeof dateInput === 'string') {
+    const datePart = dateInput.split('T')[0];
+    const parts = datePart.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+    }
+  }
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '-';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 function generateApplicationPDF(application, res) {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
 
@@ -131,10 +148,10 @@ function generateApplicationPDF(application, res) {
 
   doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#475569');
   doc.text('From Date:', 50, detailY + 10);
-  doc.font('Helvetica').fillColor(textDark).text(new Date(application.fromDate).toLocaleDateString(), 125, detailY + 10);
+  doc.font('Helvetica').fillColor(textDark).text(formatDateDDMMYYYY(application.fromDate), 125, detailY + 10);
 
   doc.font('Helvetica-Bold').fillColor('#475569').text('To Date:', 310, detailY + 10);
-  doc.font('Helvetica').fillColor(textDark).text(new Date(application.toDate).toLocaleDateString(), 380, detailY + 10);
+  doc.font('Helvetica').fillColor(textDark).text(formatDateDDMMYYYY(application.toDate), 380, detailY + 10);
 
   doc.font('Helvetica-Bold').fillColor('#475569').text(isOD ? 'Event Name:' : 'Leave Type:', 50, detailY + 30);
   doc.font('Helvetica').fillColor(textDark).text(isOD ? (application.eventName || 'N/A') : (application.leaveType || 'General'), 125, detailY + 30);
@@ -149,35 +166,7 @@ function generateApplicationPDF(application, res) {
 
   doc.y = detailY + 90;
 
-  // 5. Parent Confirmation Section
-  doc
-    .fontSize(11)
-    .font('Helvetica-Bold')
-    .fillColor(primaryColor)
-    .text('PARENT CONFIRMATION RECORD', 40)
-    .moveDown(0.5);
-
-  const parentY = doc.y;
-  doc.rect(40, parentY, 515, 35).fillAndStroke('#F8FAFC', '#E2E8F0');
-
-  if (application.parentConfirmation) {
-    const pc = application.parentConfirmation;
-    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#475569');
-    doc.text('Status:', 50, parentY + 10);
-    doc.font('Helvetica-Bold').fillColor(pc.isConfirmed ? '#16A34A' : '#DC2626').text(pc.isConfirmed ? 'PARENT CONFIRMED' : 'NOT CONFIRMED', 95, parentY + 10);
-
-    doc.font('Helvetica-Bold').fillColor('#475569').text('Confirmed Date:', 220, parentY + 10);
-    doc.font('Helvetica').fillColor(textDark).text(new Date(pc.confirmedAt).toLocaleString(), 300, parentY + 10);
-
-    doc.font('Helvetica-Bold').fillColor('#475569').text('Advisor:', 420, parentY + 10);
-    doc.font('Helvetica').fillColor(textDark).text(pc.advisor ? pc.advisor.name : 'N/A', 465, parentY + 10);
-  } else {
-    doc.fontSize(8.5).font('Helvetica-Oblique').fillColor('#64748B').text('Parent confirmation pending or not recorded.', 50, parentY + 10);
-  }
-
-  doc.y = parentY + 50;
-
-  // 6. Approval Audit History Table
+  // 5. Approval Audit History Table
   doc
     .fontSize(11)
     .font('Helvetica-Bold')
@@ -209,7 +198,7 @@ function generateApplicationPDF(application, res) {
       
       doc.fillColor(textDark).font('Helvetica').text(item.staff ? item.staff.name : 'System', 255, currentTableRowY + 5, { width: 105 });
       doc.text(item.remarks || '-', 365, currentTableRowY + 5, { width: 95 });
-      doc.text(new Date(item.timestamp).toLocaleDateString(), 465, currentTableRowY + 5, { width: 85 });
+      doc.text(formatDateDDMMYYYY(item.timestamp), 465, currentTableRowY + 5, { width: 85 });
 
       currentTableRowY += 20;
     });
@@ -235,7 +224,7 @@ function generateApplicationPDF(application, res) {
   doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Tutor Approval', 40, sigBlockY);
   doc.font('Helvetica-Oblique').fillColor('#64748B').text('[ Electronically Verified ]', 40, sigBlockY + 25);
 
-  doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Class Advisor Confirmation', 170, sigBlockY);
+  doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Class Advisor Approval', 170, sigBlockY);
   doc.font('Helvetica-Oblique').fillColor('#64748B').text('[ Electronically Verified ]', 170, sigBlockY + 25);
 
   doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Head of Department (HOD)', 320, sigBlockY);

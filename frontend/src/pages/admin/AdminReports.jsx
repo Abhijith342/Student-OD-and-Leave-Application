@@ -1,3 +1,5 @@
+import DatePicker from '../../components/DatePicker';
+import { formatDate, formatDateTime } from '../../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { 
@@ -78,12 +80,12 @@ export default function AdminReports() {
       `"${app.student?.name || ''}"`,
       app.student?.registerNumber || '',
       app.student?.department?.code || '',
-      new Date(app.fromDate).toLocaleDateString(),
-      new Date(app.toDate).toLocaleDateString(),
+      formatDate(app.fromDate),
+      formatDate(app.toDate),
       `"${(app.reason || '').replace(/"/g, '""')}"`,
       app.currentStage,
       app.status,
-      new Date(app.createdAt).toLocaleString()
+      formatDateTime(app.createdAt)
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -191,21 +193,28 @@ export default function AdminReports() {
 
           <div>
             <label className="block text-[10px] text-slate-400 font-bold mb-0.5">From Date</label>
-            <input
-              type="date"
+            <DatePicker
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={(e) => {
+                const val = typeof e === 'object' && e?.target ? e.target.value : e;
+                setFromDate(val);
+              }}
               className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+              placeholder="DD/MM/YYYY"
             />
           </div>
 
           <div>
             <label className="block text-[10px] text-slate-400 font-bold mb-0.5">To Date</label>
-            <input
-              type="date"
+            <DatePicker
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              min={fromDate || undefined}
+              onChange={(e) => {
+                const val = typeof e === 'object' && e?.target ? e.target.value : e;
+                setToDate(val);
+              }}
               className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+              placeholder="DD/MM/YYYY"
             />
           </div>
 

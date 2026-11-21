@@ -27,6 +27,19 @@ async function getProfile(req, res, next) {
   }
 }
 
+async function updateProfile(req, res, next) {
+  try {
+    const user = await authService.updateProfile(req.user.id, req.body, req.file);
+    res.status(200).json({
+      status: 'success',
+      message: 'Profile updated successfully',
+      data: { user }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function changePassword(req, res, next) {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -40,8 +53,23 @@ async function changePassword(req, res, next) {
   }
 }
 
+async function forgotPassword(req, res, next) {
+  try {
+    const { registerNumber, reason, studentPhone, email } = req.body;
+    const result = await authService.requestPasswordReset({ registerNumber, reason, studentPhone, email });
+    res.status(200).json({
+      status: 'success',
+      message: result.message
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   login,
   getProfile,
-  changePassword
+  updateProfile,
+  changePassword,
+  forgotPassword
 };

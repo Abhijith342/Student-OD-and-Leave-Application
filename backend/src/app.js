@@ -28,6 +28,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static file serving for uploads directory
 app.use('/uploads', express.static(config.uploadDir));
 
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date() });
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/applications', applicationRoutes);
@@ -35,11 +40,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
-
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date() });
-});
+app.use('/api', adminRoutes);
 
 // Handle undefined routes in Express 5
 app.use((req, res, next) => {

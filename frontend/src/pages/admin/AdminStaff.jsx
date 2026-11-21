@@ -11,7 +11,11 @@ import {
   X, 
   KeyRound, 
   ShieldCheck, 
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Trash2,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function AdminStaff() {
@@ -31,6 +35,18 @@ export default function AdminStaff() {
   const [editStaff, setEditStaff] = useState(null);
   const [resetStaffUser, setResetStaffUser] = useState(null);
   const [newPassword, setNewPassword] = useState('Password123!');
+
+  // Quick Photo Upload Modal State
+  const [photoModalStaff, setPhotoModalStaff] = useState(null);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState(null);
+  const [photoSuccess, setPhotoSuccess] = useState(null);
+
+  // Edit/Create Modal Photo state
+  const [formPhotoFile, setFormPhotoFile] = useState(null);
+  const [formPhotoPreview, setFormPhotoPreview] = useState(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -87,6 +103,8 @@ export default function AdminStaff() {
     setEditStaff(null);
     setFormError(null);
     setFormSuccess(null);
+    setFormPhotoFile(null);
+    setFormPhotoPreview(null);
     setFormData({
       name: '',
       employeeId: '',
@@ -103,6 +121,8 @@ export default function AdminStaff() {
     setEditStaff(s);
     setFormError(null);
     setFormSuccess(null);
+    setFormPhotoFile(null);
+    setFormPhotoPreview(s.profilePhoto || s.user?.profilePhoto || null);
     setFormData({
       name: s.name || '',
       employeeId: s.employeeId || '',
@@ -122,16 +142,29 @@ export default function AdminStaff() {
     setSubmitting(true);
 
     try {
+      let body;
+      if (formPhotoFile) {
+        body = new FormData();
+        Object.keys(formData).forEach(k => {
+          if (formData[k] !== undefined && formData[k] !== null) {
+            body.append(k, formData[k]);
+          }
+        });
+        body.append('profilePhoto', formPhotoFile);
+      } else {
+        body = JSON.stringify(formData);
+      }
+
       if (editStaff) {
         await apiRequest(`/admin/staff/${editStaff.id}`, {
           method: 'PUT',
-          body: JSON.stringify(formData)
+          body
         });
         setFormSuccess('Staff profile updated successfully!');
       } else {
         await apiRequest('/admin/staff', {
           method: 'POST',
-          body: JSON.stringify(formData)
+          body
         });
         setFormSuccess('Staff created successfully!');
       }
@@ -143,6 +176,73 @@ export default function AdminStaff() {
       setFormError(err.message || 'Failed to save staff record.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Quick Photo Modal Handlers
+  const openPhotoUploadModal = (s) => {
+    setPhotoModalStaff(s);
+    setSelectedPhotoFile(null);
+    setPhotoPreviewUrl(s.profilePhoto || s.user?.profilePhoto || null);
+    setPhotoError(null);
+    setPhotoSuccess(null);
+  };
+
+  const handlePhotoSelect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedPhotoFile(file);
+      setPhotoPreviewUrl(URL.createObjectURL(file));
+      setPhotoError(null);
+    }
+  };
+
+  const handlePhotoUploadSubmit = async () => {
+    if (!selectedPhotoFile || !photoModalStaff) {
+      setPhotoError('Please choose an image file first.');
+      return;
+    }
+    setPhotoUploading(true);
+    setPhotoError(null);
+    try {
+      const fd = new FormData();
+      fd.append('profilePhoto', selectedPhotoFile);
+      const res = await apiRequest(`/admin/staff/${photoModalStaff.id}/photo`, {
+        method: 'POST',
+        body: fd
+      });
+      setPhotoSuccess('Profile photo updated successfully!');
+      const updatedPath = res.data.profilePhoto;
+      setStaffList(prev => prev.map(s => s.id === photoModalStaff.id ? { ...s, profilePhoto: updatedPath, user: { ...s.user, profilePhoto: updatedPath } } : s));
+      setTimeout(() => {
+        setPhotoModalStaff(null);
+      }, 900);
+    } catch (err) {
+      setPhotoError(err.message || 'Failed to upload photo.');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!photoModalStaff) return;
+    if (!window.confirm(`Remove profile photo for ${photoModalStaff.name}?`)) return;
+    setPhotoUploading(true);
+    try {
+      await apiRequest(`/admin/staff/${photoModalStaff.id}/photo`, {
+        method: 'DELETE'
+      });
+      setPhotoPreviewUrl(null);
+      setSelectedPhotoFile(null);
+      setPhotoSuccess('Profile photo removed.');
+      setStaffList(prev => prev.map(s => s.id === photoModalStaff.id ? { ...s, profilePhoto: null, user: { ...s.user, profilePhoto: null } } : s));
+      setTimeout(() => {
+        setPhotoModalStaff(null);
+      }, 700);
+    } catch (err) {
+      setPhotoError(err.message || 'Failed to remove photo.');
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -160,6 +260,21 @@ export default function AdminStaff() {
       fetchStaff();
     } catch (err) {
       alert(err.message || 'Failed to update staff status.');
+    }
+  };
+
+  const handleDeleteStaff = async (s) => {
+    if (!window.confirm(`Are you sure you want to PERMANENTLY delete staff member ${s.name} (${s.employeeId})? This will delete their profile and ID.`)) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/admin/staff/${s.id}`, {
+        method: 'DELETE'
+      });
+      setStaffList(prev => prev.filter(staff => staff.id !== s.id));
+    } catch (err) {
+      alert(err.message || 'Failed to delete staff member.');
     }
   };
 
@@ -300,15 +415,56 @@ export default function AdminStaff() {
                   return (
                     <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="p-3.5 font-bold font-mono text-slate-900">{s.employeeId}</td>
-                      <td className="p-3.5 font-bold text-slate-800">{s.name}</td>
+                      <td className="p-3.5">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative group shrink-0">
+                            {s.profilePhoto || s.user?.profilePhoto ? (
+                              <img
+                                src={`http://localhost:5000${s.profilePhoto || s.user?.profilePhoto}`}
+                                alt={s.name}
+                                className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
+                                onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold items-center justify-center text-xs border border-blue-200 ${s.profilePhoto || s.user?.profilePhoto ? 'hidden' : 'flex'}`}
+                            >
+                              {s.name ? s.name.charAt(0).toUpperCase() : 'S'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openPhotoUploadModal(s)}
+                              title="Upload or Change Profile Photo"
+                              className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-xs transition-transform hover:scale-110"
+                            >
+                              <Camera className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800 block leading-tight">{s.name}</span>
+                          </div>
+                        </div>
+                      </td>
                       <td className="p-3.5 text-[11px] text-slate-600">
                         <span className="block font-mono text-slate-900">{s.user?.username}</span>
                         <span>{s.user?.email || 'No email provided'}</span>
                       </td>
                       <td className="p-3.5">
-                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${roleColors[s.role] || 'bg-slate-100'}`}>
-                          {s.role}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleColors[s.role] || 'bg-slate-100'}`}>
+                            {s.role}
+                          </span>
+                          {s.role === 'CLASS_ADVISOR' && s._count?.tutoredStudents > 0 && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border bg-blue-100 text-blue-800 border-blue-200">
+                              TUTOR
+                            </span>
+                          )}
+                          {s.role === 'TUTOR' && s._count?.advisedStudents > 0 && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border bg-purple-100 text-purple-800 border-purple-200">
+                              CLASS ADVISOR
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3.5 font-semibold text-slate-700">{s.department?.code}</td>
                       <td className="p-3.5 text-[11px]">
@@ -346,6 +502,13 @@ export default function AdminStaff() {
                         >
                           {isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                         </button>
+                        <button
+                          onClick={() => handleDeleteStaff(s)}
+                          title="Permanently Delete Staff ID"
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -381,6 +544,58 @@ export default function AdminStaff() {
                   <span>{formSuccess}</span>
                 </div>
               )}
+
+              {/* Profile Photo Section */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center space-x-4">
+                <div className="relative w-16 h-16 shrink-0">
+                  {formPhotoPreview ? (
+                    <img
+                      src={formPhotoPreview.startsWith('blob:') ? formPhotoPreview : `http://localhost:5000${formPhotoPreview}`}
+                      alt="Staff Preview"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-blue-500 shadow-xs"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-base border-2 border-slate-300">
+                      <Camera className="w-6 h-6 text-slate-400" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <label className="block font-bold text-slate-800 mb-0.5">Staff Profile Photo</label>
+                  <p className="text-[11px] text-slate-500 mb-2.5">Upload a clean ID photo for this staff member (JPG, PNG, max 5MB)</p>
+                  <div className="flex items-center space-x-2">
+                    <label className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg cursor-pointer text-xs inline-flex items-center space-x-1.5 shadow-2xs transition-colors">
+                      <Upload className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{formPhotoPreview ? 'Change Photo' : 'Select Photo'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const file = e.target.files[0];
+                            setFormPhotoFile(file);
+                            setFormPhotoPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                      />
+                    </label>
+                    {formPhotoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormPhotoFile(null);
+                          setFormPhotoPreview(null);
+                          setFormData({ ...formData, profilePhoto: null });
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold rounded-lg text-xs transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -538,6 +753,101 @@ export default function AdminStaff() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Photo Upload Modal */}
+      {photoModalStaff && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                <Camera className="w-4 h-4 text-blue-600" />
+                <span>Upload Staff Profile Photo</span>
+              </h3>
+              <button onClick={() => setPhotoModalStaff(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-center space-y-3">
+              <div className="relative mx-auto w-24 h-24">
+                {photoPreviewUrl ? (
+                  <img
+                    src={photoPreviewUrl.startsWith('blob:') ? photoPreviewUrl : `http://localhost:5000${photoPreviewUrl}`}
+                    alt={photoModalStaff.name}
+                    className="w-24 h-24 rounded-full object-cover border-3 border-blue-500 shadow-md mx-auto"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-2xl border-3 border-blue-200 mx-auto">
+                    {photoModalStaff.name ? photoModalStaff.name.charAt(0).toUpperCase() : 'S'}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">{photoModalStaff.name}</h4>
+                <p className="text-slate-500 font-mono text-[11px]">{photoModalStaff.employeeId}</p>
+                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  {photoModalStaff.role}
+                </span>
+              </div>
+
+              {photoError && (
+                <div className="p-2.5 bg-rose-50 text-rose-700 rounded-xl font-medium text-[11px]">
+                  {photoError}
+                </div>
+              )}
+              {photoSuccess && (
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium text-[11px]">
+                  {photoSuccess}
+                </div>
+              )}
+
+              <div className="pt-2 flex flex-col items-center space-y-2">
+                <label className="w-full py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl cursor-pointer text-xs flex items-center justify-center space-x-2 transition-colors border border-blue-200">
+                  <Upload className="w-4 h-4" />
+                  <span>Select Image from Device</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                </label>
+
+                {(photoModalStaff.profilePhoto || photoModalStaff.user?.profilePhoto || photoPreviewUrl) && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={photoUploading}
+                    className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Current Photo</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPhotoModalStaff(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePhotoUploadSubmit}
+                disabled={!selectedPhotoFile || photoUploading}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
+              >
+                {photoUploading ? 'Saving...' : 'Save Photo'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 const adminService = require('../services/adminService');
+const AppError = require('../utils/appError');
 
 async function getDashboardStats(req, res, next) {
   try {
@@ -29,7 +30,11 @@ async function getStudentById(req, res, next) {
 
 async function createStudent(req, res, next) {
   try {
-    const student = await adminService.createStudent(req.user, req.body);
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.profilePhoto = `/uploads/${req.file.filename}`;
+    }
+    const student = await adminService.createStudent(req.user, payload);
     res.status(201).json({ status: 'success', message: 'Student created successfully.', data: { student } });
   } catch (error) {
     next(error);
@@ -38,8 +43,42 @@ async function createStudent(req, res, next) {
 
 async function updateStudent(req, res, next) {
   try {
-    const student = await adminService.updateStudent(req.user, req.params.id, req.body);
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.profilePhoto = `/uploads/${req.file.filename}`;
+    }
+    const student = await adminService.updateStudent(req.user, req.params.id, payload);
     res.status(200).json({ status: 'success', message: 'Student updated successfully.', data: { student } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function uploadStudentPhoto(req, res, next) {
+  try {
+    if (!req.file) {
+      throw new AppError('Profile photo file is required.', 400);
+    }
+    const profilePhoto = `/uploads/${req.file.filename}`;
+    const student = await adminService.updateStudent(req.user, req.params.id, { profilePhoto });
+    res.status(200).json({
+      status: 'success',
+      message: 'Student profile photo uploaded successfully.',
+      data: { student, profilePhoto }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function removeStudentPhoto(req, res, next) {
+  try {
+    const student = await adminService.updateStudent(req.user, req.params.id, { profilePhoto: null });
+    res.status(200).json({
+      status: 'success',
+      message: 'Student profile photo removed successfully.',
+      data: { student, profilePhoto: null }
+    });
   } catch (error) {
     next(error);
   }
@@ -49,6 +88,15 @@ async function toggleStudentStatus(req, res, next) {
   try {
     const result = await adminService.toggleStudentStatus(req.user, req.params.id, req.body.active);
     res.status(200).json({ status: 'success', message: `Student status updated to ${req.body.active ? 'Active' : 'Inactive'}.`, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteStudent(req, res, next) {
+  try {
+    const result = await adminService.deleteStudent(req.user, req.params.id);
+    res.status(200).json({ status: 'success', message: result.message });
   } catch (error) {
     next(error);
   }
@@ -65,7 +113,11 @@ async function getAllStaff(req, res, next) {
 
 async function createStaff(req, res, next) {
   try {
-    const staff = await adminService.createStaff(req.user, req.body);
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.profilePhoto = `/uploads/${req.file.filename}`;
+    }
+    const staff = await adminService.createStaff(req.user, payload);
     res.status(201).json({ status: 'success', message: 'Staff created successfully.', data: { staff } });
   } catch (error) {
     next(error);
@@ -74,8 +126,42 @@ async function createStaff(req, res, next) {
 
 async function updateStaff(req, res, next) {
   try {
-    const staff = await adminService.updateStaff(req.user, req.params.id, req.body);
+    const payload = { ...req.body };
+    if (req.file) {
+      payload.profilePhoto = `/uploads/${req.file.filename}`;
+    }
+    const staff = await adminService.updateStaff(req.user, req.params.id, payload);
     res.status(200).json({ status: 'success', message: 'Staff updated successfully.', data: { staff } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function uploadStaffPhoto(req, res, next) {
+  try {
+    if (!req.file) {
+      throw new AppError('Profile photo file is required.', 400);
+    }
+    const profilePhoto = `/uploads/${req.file.filename}`;
+    const staff = await adminService.updateStaff(req.user, req.params.id, { profilePhoto });
+    res.status(200).json({
+      status: 'success',
+      message: 'Staff profile photo uploaded successfully.',
+      data: { staff, profilePhoto }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function removeStaffPhoto(req, res, next) {
+  try {
+    const staff = await adminService.updateStaff(req.user, req.params.id, { profilePhoto: null });
+    res.status(200).json({
+      status: 'success',
+      message: 'Staff profile photo removed successfully.',
+      data: { staff, profilePhoto: null }
+    });
   } catch (error) {
     next(error);
   }
@@ -85,6 +171,15 @@ async function toggleStaffStatus(req, res, next) {
   try {
     const result = await adminService.toggleStaffStatus(req.user, req.params.id, req.body.active);
     res.status(200).json({ status: 'success', message: `Staff status updated to ${req.body.active ? 'Active' : 'Inactive'}.`, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteStaff(req, res, next) {
+  try {
+    const result = await adminService.deleteStaff(req.user, req.params.id);
+    res.status(200).json({ status: 'success', message: result.message });
   } catch (error) {
     next(error);
   }
@@ -126,6 +221,97 @@ async function updateDepartment(req, res, next) {
   }
 }
 
+
+async function getDepartmentById(req, res, next) {
+  try {
+    const department = await adminService.getDepartmentById(req.params.id);
+    res.status(200).json({ status: 'success', data: { department } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteDepartment(req, res, next) {
+  try {
+    const result = await adminService.deleteDepartment(req.user, req.params.id);
+    res.status(200).json({ status: 'success', message: result.message });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getDepartmentYears(req, res, next) {
+  try {
+    const years = await adminService.getDepartmentYears(req.params.departmentId);
+    res.status(200).json({ status: 'success', results: years.length, data: { years } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function createDepartmentYear(req, res, next) {
+  try {
+    const year = await adminService.createDepartmentYear(req.user, req.params.departmentId, req.body);
+    res.status(201).json({ status: 'success', message: 'Study year configured successfully.', data: { year } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateDepartmentYear(req, res, next) {
+  try {
+    const year = await adminService.updateDepartmentYear(req.user, req.params.id, req.body);
+    res.status(200).json({ status: 'success', message: 'Study year updated successfully.', data: { year } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteDepartmentYear(req, res, next) {
+  try {
+    const result = await adminService.deleteDepartmentYear(req.user, req.params.id);
+    res.status(200).json({ status: 'success', message: result.message });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getYearSections(req, res, next) {
+  try {
+    const sections = await adminService.getYearSections(req.params.yearId);
+    res.status(200).json({ status: 'success', results: sections.length, data: { sections } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function createYearSection(req, res, next) {
+  try {
+    const section = await adminService.createYearSection(req.user, req.params.yearId, req.body);
+    res.status(201).json({ status: 'success', message: 'Section added successfully.', data: { section } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateSection(req, res, next) {
+  try {
+    const section = await adminService.updateSection(req.user, req.params.id, req.body);
+    res.status(200).json({ status: 'success', message: 'Section updated successfully.', data: { section } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteSection(req, res, next) {
+  try {
+    const result = await adminService.deleteSection(req.user, req.params.id);
+    res.status(200).json({ status: 'success', message: result.message });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getAcademicStructure(req, res, next) {
   try {
     const structure = await adminService.getAcademicStructure();
@@ -146,7 +332,7 @@ async function bulkAssignStaff(req, res, next) {
 
 async function uploadExcelPreview(req, res, next) {
   try {
-    const preview = await adminService.processExcelPreview(req.file);
+    const preview = await adminService.processExcelPreview(req.file, req.body);
     res.status(200).json({ status: 'success', data: { preview } });
   } catch (error) {
     next(error);
@@ -216,21 +402,59 @@ async function deleteAllApplications(req, res, next) {
   }
 }
 
+
+async function getPasswordResetRequests(req, res, next) {
+  try {
+    const requests = await adminService.getPasswordResetRequests(req.query);
+    res.status(200).json({ status: 'success', results: requests.length, data: { requests } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function resolvePasswordResetRequest(req, res, next) {
+  try {
+    const { action, remarks } = req.body;
+    const result = await adminService.resolvePasswordResetRequest(req.user, req.params.id, action, remarks);
+    res.status(200).json({ status: 'success', message: result.message, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getPasswordResetRequests,
+  resolvePasswordResetRequest,
   getDashboardStats,
   getAllStudents,
   getStudentById,
   createStudent,
   updateStudent,
+  deleteStudent,
+  uploadStudentPhoto,
+  removeStudentPhoto,
   toggleStudentStatus,
   getAllStaff,
   createStaff,
   updateStaff,
+  deleteStaff,
+  uploadStaffPhoto,
+  removeStaffPhoto,
   toggleStaffStatus,
   resetUserPassword,
   getAllDepartments,
   createDepartment,
   updateDepartment,
+  getDepartmentById,
+  deleteDepartment,
+  getDepartmentYears,
+  createDepartmentYear,
+  updateDepartmentYear,
+  deleteDepartmentYear,
+  getYearSections,
+  createYearSection,
+  updateSection,
+  deleteSection,
   getAcademicStructure,
   bulkAssignStaff,
   uploadExcelPreview,

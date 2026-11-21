@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime, formatDateRange } from '../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '../services/api';
@@ -9,7 +10,7 @@ import {
   User, 
   Calendar, 
   MapPin, 
-  PhoneCall, 
+  ClipboardCheck, 
   CheckCircle, 
   XCircle, 
   Clock, 
@@ -178,10 +179,10 @@ export default function ApplicationDetailsPage() {
                 <span>Date Range & Duration</span>
               </span>
               <p className="text-slate-700">
-                <strong>From:</strong> {new Date(application.fromDate).toLocaleDateString()}
+                <strong>From:</strong> {formatDate(application.fromDate)}
               </p>
               <p className="text-slate-700">
-                <strong>To:</strong> {new Date(application.toDate).toLocaleDateString()}
+                <strong>To:</strong> {formatDate(application.toDate)}
               </p>
             </div>
 
@@ -197,23 +198,7 @@ export default function ApplicationDetailsPage() {
             )}
           </div>
 
-          {/* Parent Confirmation Record */}
-          {parentConfirmation && (
-            <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl text-xs space-y-1">
-              <span className="font-bold text-emerald-900 flex items-center space-x-1.5">
-                <PhoneCall className="w-4 h-4 text-emerald-600" />
-                <span>Class Advisor Parent Telephonic Confirmation</span>
-              </span>
-              <p className="text-emerald-800">
-                <strong>Status:</strong> {parentConfirmation.isConfirmed ? '✓ CONFIRMED WITH PARENT/GUARDIAN' : '❌ NOT CONFIRMED'}
-              </p>
-              {parentConfirmation.remarks && (
-                <p className="text-emerald-700">
-                  <strong>Notes:</strong> {parentConfirmation.remarks}
-                </p>
-              )}
-            </div>
-          )}
+
 
           {/* Audit Approval Trait Timeline */}
           <div>
@@ -244,7 +229,7 @@ export default function ApplicationDetailsPage() {
                       )}
                     </div>
                     <span className="text-[10px] text-slate-400 shrink-0">
-                      {new Date(history.timestamp).toLocaleString()}
+                      {formatDateTime(history.timestamp)}
                     </span>
                   </div>
                 ))}
