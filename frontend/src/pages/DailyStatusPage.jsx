@@ -17,7 +17,7 @@ import {
   Sparkles,
   School
 } from 'lucide-react';
-import { calculateDurationDays, formatDateRange } from '../utils/dateUtils';
+import { calculateDurationDays, formatDate, formatDateRange } from '../utils/dateUtils';
 import ApplicationDetailsModal from './ApplicationDetailsModal';
 import { StatusBadge, StageBadge } from '../components/StatusBadge';
 import DatePicker from '../components/DatePicker';
@@ -30,18 +30,6 @@ function getTodayString() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function formatDisplayDate(dateStr) {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-  const dd = parts[2].padStart(2, '0');
-  const mm = parts[1].padStart(2, '0');
-  const yyyy = parts[0];
-  const weekday = d.toLocaleDateString('en-IN', { weekday: 'long' });
-  return `${weekday}, ${dd}/${mm}/${yyyy}`;
-}
-
 function adjustDate(dateStr, days) {
   const parts = dateStr.split('-');
   const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
@@ -52,8 +40,48 @@ function adjustDate(dateStr, days) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function getWeekRange() {
+  const now = new Date();
+  const day = now.getDay();
+  // Monday as start of week (in JS Sunday is 0)
+  const diffToMonday = now.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(now.getFullYear(), now.getMonth(), diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const toYMD = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  return { from: toYMD(monday), to: toYMD(sunday) };
+}
+
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  const dd = parts[2].padStart(2, '0');
+  const mm = parts[1].padStart(2, '0');
+  const yyyy = parts[0];
+  const weekday = d.toLocaleDateString('en-IN', { weekday: 'short' });
+  return `${weekday}, ${dd}/${mm}/${yyyy}`;
+}
+
+function formatDisplayRange(fromDateStr, toDateStr) {
+  if (!fromDateStr && !toDateStr) return '';
+  if (!toDateStr || fromDateStr === toDateStr) {
+    return formatDisplayDate(fromDateStr);
+  }
+  return `${formatDisplayDate(fromDateStr)}  –  ${formatDisplayDate(toDateStr)}`;
+}
+
 export default function DailyStatusPage() {
-  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [fromDate, setFromDate] = useState(getTodayString());
+  const [toDate, setToDate] = useState(getTodayString());
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -62,23 +90,48 @@ export default function DailyStatusPage() {
   const [selectedApp, setSelectedApp] = useState(null);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
 
-  const fetchDailyStatus = async (date) => {
+  const todayStr = getTodayString();
+  const isTodaySelected = fromDate === todayStr && toDate === todayStr;
+  const weekRange = useMemo(() => getWeekRange(), []);
+  const isThisWeekSelected = fromDate === weekRange.from && toDate === weekRange.to;
+  const isNext7DaysSelected = fromDate === todayStr && toDate === adjustDate(todayStr, 6);
+
+  const handlePreset = (type) => {
+    if (type === 'TODAY') {
+      const today = getTodayString();
+      setFromDate(today);
+      setToDate(today);
+    } else if (type === 'THIS_WEEK') {
+      const { from, to } = getWeekRange();
+      setFromDate(from);
+      setToDate(to);
+    } else if (type === 'NEXT_7_DAYS') {
+      const today = getTodayString();
+      setFromDate(today);
+      setToDate(adjustDate(today, 6));
+    }
+  };
+
+  const fetchDailyStatus = async (fDate, tDate) => {
     setLoading(true);
     setError('');
     try {
-      const res = await apiRequest(`/applications/daily-status?date=${date}`);
+      const query = fDate === tDate 
+        ? `date=${fDate}`
+        : `fromDate=${fDate}&toDate=${tDate}`;
+      const res = await apiRequest(`/applications/daily-status?${query}`);
       setData(res.data);
     } catch (err) {
       console.error('Failed to fetch daily status:', err);
-      setError(err.message || 'Failed to load daily attendance records');
+      setError(err.message || 'Failed to load attendance records');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDailyStatus(selectedDate);
-  }, [selectedDate]);
+    fetchDailyStatus(fromDate, toDate);
+  }, [fromDate, toDate]);
 
   const summary = data?.summary || {
     totalBatchStudents: 0,
@@ -127,7 +180,7 @@ export default function DailyStatusPage() {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2 text-blue-600 font-bold text-xs uppercase tracking-wider mb-1">
             <Calendar className="w-4 h-4" />
@@ -137,50 +190,89 @@ export default function DailyStatusPage() {
             Daily On-Duty (OD) & Leave Status Tracker
           </h2>
           <p className="text-xs text-slate-500">
-            Select any date to see which students are away on hackathons or approved leave
+            Filter by From and To dates to track student OD and Leave status across your department
           </p>
         </div>
 
-        {/* Single Date Picker Widget */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 w-full md:w-auto shrink-0 bg-slate-50 p-2 rounded-2xl border border-slate-200">
-          <div className="flex items-center space-x-1">
+        {/* From / To Date Filter Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto shrink-0 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+          {/* Quick presets */}
+          <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border border-slate-200/80 shadow-2xs">
             <button
-              onClick={() => setSelectedDate(adjustDate(selectedDate, -1))}
-              className="p-2 hover:bg-white rounded-xl text-slate-600 transition-colors shadow-2xs border border-transparent hover:border-slate-200"
-              title="Previous Day"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => setSelectedDate(getTodayString())}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-                selectedDate === getTodayString()
+              type="button"
+              onClick={() => handlePreset('TODAY')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                isTodaySelected
                   ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
               Today
             </button>
-
             <button
-              onClick={() => setSelectedDate(adjustDate(selectedDate, 1))}
-              className="p-2 hover:bg-white rounded-xl text-slate-600 transition-colors shadow-2xs border border-transparent hover:border-slate-200"
-              title="Next Day"
+              type="button"
+              onClick={() => handlePreset('THIS_WEEK')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                isThisWeekSelected
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
             >
-              <ChevronRight className="w-4 h-4" />
+              This Week
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePreset('NEXT_7_DAYS')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                isNext7DaysSelected
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              Next 7D
             </button>
           </div>
 
-          <div className="relative w-36 sm:w-44">
-            <DatePicker
-              value={selectedDate}
-              onChange={(e) => {
-                const val = typeof e === 'object' && e?.target ? e.target.value : e;
-                if (val) setSelectedDate(val);
-              }}
-              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
-            />
+          <div className="hidden sm:block h-6 w-px bg-slate-200 mx-0.5" />
+
+          {/* From / To Date Pickers */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div className="flex items-center space-x-1.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">From</span>
+              <div className="relative w-36 sm:w-38">
+                <DatePicker
+                  value={fromDate}
+                  onChange={(e) => {
+                    const val = typeof e === 'object' && e?.target ? e.target.value : e;
+                    if (val) {
+                      setFromDate(val);
+                      if (toDate && val > toDate) setToDate(val);
+                    }
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
+                />
+              </div>
+            </div>
+
+            <span className="text-slate-400 font-bold text-xs hidden sm:inline">→</span>
+
+            <div className="flex items-center space-x-1.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">To</span>
+              <div className="relative w-36 sm:w-38">
+                <DatePicker
+                  value={toDate}
+                  min={fromDate}
+                  onChange={(e) => {
+                    const val = typeof e === 'object' && e?.target ? e.target.value : e;
+                    if (val) {
+                      setToDate(val);
+                      if (fromDate && val < fromDate) setFromDate(val);
+                    }
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -191,10 +283,10 @@ export default function DailyStatusPage() {
           <div className="space-y-1">
             <div className="flex items-center space-x-2 text-blue-300 text-xs font-bold uppercase tracking-wider">
               <Calendar className="w-3.5 h-3.5 text-blue-400" />
-              <span>Status for Selected Date</span>
+              <span>{fromDate === toDate ? 'Status for Selected Date' : 'Status for Selected Date Range'}</span>
             </div>
             <h3 className="text-2xl font-black text-white">
-              {formatDisplayDate(selectedDate)}
+              {formatDisplayRange(fromDate, toDate)}
             </h3>
             <p className="text-xs text-blue-200/80">
               {summary.totalAbsent === 0
@@ -326,7 +418,7 @@ export default function DailyStatusPage() {
           <div className="flex items-center space-x-2">
             <Users className="w-4 h-4 text-blue-600" />
             <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">
-              Students Away on {formatDisplayDate(selectedDate)}
+              Students Away ({formatDisplayRange(fromDate, toDate)})
             </h4>
           </div>
           <span className="text-[11px] text-slate-500 font-medium">
@@ -336,7 +428,7 @@ export default function DailyStatusPage() {
 
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-500">
-            Loading attendance records for {selectedDate}...
+            Loading attendance records for {formatDateRange(fromDate, toDate)}...
           </div>
         ) : filteredApps.length === 0 ? (
           <div className="p-12 text-center space-y-3">
@@ -348,8 +440,7 @@ export default function DailyStatusPage() {
                 100% In-Class Attendance Expected!
               </h4>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                No students from this batch are on Leave or On-Duty on{' '}
-                <strong>{formatDisplayDate(selectedDate)}</strong>.
+                No students from this batch are on Leave or On-Duty {fromDate === toDate ? `on ${formatDisplayDate(fromDate)}` : `between ${formatDate(fromDate)} and ${formatDate(toDate)}`}.
               </p>
             </div>
           </div>

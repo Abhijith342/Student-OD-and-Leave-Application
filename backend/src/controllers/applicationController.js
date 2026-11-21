@@ -233,8 +233,8 @@ async function downloadPDF(req, res, next) {
 
 async function getDailyStatus(req, res, next) {
   try {
-    const { date } = req.query;
-    const result = await applicationService.getDailyStatus(req.user, date);
+    const { date, fromDate, toDate } = req.query;
+    const result = await applicationService.getDailyStatus(req.user, { date, fromDate, toDate });
     res.status(200).json({
       status: 'success',
       data: result

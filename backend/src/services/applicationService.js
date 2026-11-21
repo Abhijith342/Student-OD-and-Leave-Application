@@ -615,29 +615,63 @@ async function principalOfficeComplete(applicationId, staffId, remarks = 'Final 
 }
 
 
-async function getDailyStatus(currentUser, dateStr) {
+async function getDailyStatus(currentUser, dateOptions) {
   const { role, staffId, departmentId } = currentUser;
 
-  let targetDate;
-  if (dateStr) {
-    const parts = String(dateStr).split('-');
+  let fromDateStr;
+  let toDateStr;
+
+  if (typeof dateOptions === 'string') {
+    fromDateStr = dateOptions;
+    toDateStr = dateOptions;
+  } else if (dateOptions && typeof dateOptions === 'object') {
+    fromDateStr = dateOptions.fromDate || dateOptions.date;
+    toDateStr = dateOptions.toDate || dateOptions.fromDate || dateOptions.date;
+  }
+
+  // Parse startTarget (fromDate)
+  let startTarget;
+  if (fromDateStr) {
+    const parts = String(fromDateStr).split('-');
     if (parts.length === 3) {
-      targetDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      startTarget = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
     } else {
-      targetDate = new Date(dateStr);
+      startTarget = new Date(fromDateStr);
     }
   } else {
-    targetDate = new Date();
+    startTarget = new Date();
+  }
+  if (isNaN(startTarget.getTime())) {
+    startTarget = new Date();
   }
 
-  if (isNaN(targetDate.getTime())) {
-    targetDate = new Date();
+  // Parse endTarget (toDate)
+  let endTarget;
+  if (toDateStr) {
+    const parts = String(toDateStr).split('-');
+    if (parts.length === 3) {
+      endTarget = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      endTarget = new Date(toDateStr);
+    }
+  } else {
+    endTarget = new Date(startTarget);
+  }
+  if (isNaN(endTarget.getTime())) {
+    endTarget = new Date(startTarget);
   }
 
-  const startOfDay = new Date(targetDate);
+  // Ensure startTarget <= endTarget
+  if (startTarget.getTime() > endTarget.getTime()) {
+    const temp = startTarget;
+    startTarget = endTarget;
+    endTarget = temp;
+  }
+
+  const startOfDay = new Date(startTarget);
   startOfDay.setHours(0, 0, 0, 0);
 
-  const endOfDay = new Date(targetDate);
+  const endOfDay = new Date(endTarget);
   endOfDay.setHours(23, 59, 59, 999);
 
   let studentWhere = {};
@@ -657,6 +691,7 @@ async function getDailyStatus(currentUser, dateStr) {
     },
     include: includeFullDetails,
     orderBy: [
+      { fromDate: 'asc' },
       { type: 'asc' },
       { student: { name: 'asc' } }
     ]
@@ -681,13 +716,20 @@ async function getDailyStatus(currentUser, dateStr) {
     ? ((expectedInClass / totalBatchStudents) * 100).toFixed(1) + '%'
     : '100%';
 
-  const yyyy = targetDate.getFullYear();
-  const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(targetDate.getDate()).padStart(2, '0');
-  const formattedDateStr = `${yyyy}-${mm}-${dd}`;
+  const toYMD = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const formattedFrom = toYMD(startTarget);
+  const formattedTo = toYMD(endTarget);
 
   return {
-    date: formattedDateStr,
+    date: formattedFrom,
+    fromDate: formattedFrom,
+    toDate: formattedTo,
     summary: {
       totalBatchStudents,
       totalAbsent,
