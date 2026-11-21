@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../services/api';
-import { FileCheck, Upload, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { FileCheck, Upload, AlertCircle, CheckCircle, ArrowLeft, FileText, Paperclip, Trash2 } from 'lucide-react';
 import DatePicker from '../components/DatePicker';
 
 export default function ApplyOD() {
@@ -21,6 +21,7 @@ export default function ApplyOD() {
   });
 
   const [file, setFile] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -30,17 +31,45 @@ export default function ApplyOD() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        setError('File size exceeds 5MB limit. Please upload a smaller file.');
-        setFile(null);
-        return;
-      }
-      setFile(selectedFile);
-      setError('');
+  const validateAndSetFile = (selectedFile) => {
+    if (!selectedFile) return;
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setError('File size exceeds 5MB limit. Please upload a smaller file.');
+      setFile(null);
+      return;
     }
+    setError('');
+    setFile(selectedFile);
+  };
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    validateAndSetFile(selectedFile);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      validateAndSetFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
   };
 
   const validateForm = (e) => {
@@ -279,38 +308,97 @@ export default function ApplyOD() {
         {/* Section 3: Document Upload (Mandatory) */}
         <div>
           <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Supporting Document (Brochure / Call Letter / Event Proof) *
-            </h3>
+            <div className="flex items-center space-x-2">
+              <Paperclip className="w-4 h-4 text-blue-600" />
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                Supporting Document (Brochure / Call Letter / Event Proof) *
+              </h3>
+            </div>
             <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200">
               Mandatory
             </span>
           </div>
-          <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-colors ${
-            file ? 'border-emerald-400 bg-emerald-50/30' : 'border-rose-300 bg-rose-50/20 hover:bg-rose-50/40'
-          }`}>
-            <Upload className={`w-8 h-8 mx-auto mb-2 ${file ? 'text-emerald-500' : 'text-rose-400'}`} />
-            <p className="text-xs font-bold text-slate-700">
-              {file ? 'Document attached successfully' : 'Upload mandatory event brochure or invitation proof *'}
-            </p>
-            <p className="text-[11px] text-slate-500 mt-1">PDF, PNG, JPG or JPEG up to 5MB</p>
-            <input
-              type="file"
-              required
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={handleFileChange}
-              className="mt-3 text-xs mx-auto block"
-            />
-            {file ? (
-              <p className="mt-2 text-xs font-semibold text-emerald-600">
-                ✓ Attached: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+
+          {!file ? (
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50/60 scale-[1.01]'
+                  : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-slate-50'
+              }`}
+            >
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                <Upload className="w-6 h-6" />
+              </div>
+              <h4 className="text-xs font-bold text-slate-800">
+                Choose a file or drag & drop here
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                Upload your official event brochure, symposium invite, or hackathon confirmation
               </p>
-            ) : (
-              <p className="mt-2 text-[11px] font-semibold text-rose-500">
-                * Please attach a document to proceed with submission
+              <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                PDF, PNG, JPG or JPEG (Max 5MB)
               </p>
-            )}
-          </div>
+
+              <div className="mt-4">
+                <label className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Choose File</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-slate-900 text-xs truncate max-w-xs block">
+                      {file.name}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 shrink-0">
+                      {(file.size / (1024 * 1024)).toFixed(2)} MB
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center space-x-1 mt-0.5">
+                    <CheckCircle className="w-3 h-3 shrink-0" />
+                    <span>File attached successfully and ready to submit</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 self-end sm:self-auto shrink-0">
+                <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors shadow-2xs">
+                  <span>Change File</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  title="Remove document"
+                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Submit Action */}
