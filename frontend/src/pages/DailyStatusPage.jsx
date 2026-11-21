@@ -30,35 +30,6 @@ function getTodayString() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function adjustDate(dateStr, days) {
-  const parts = dateStr.split('-');
-  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-  d.setDate(d.getDate() + days);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function getWeekRange() {
-  const now = new Date();
-  const day = now.getDay();
-  // Monday as start of week (in JS Sunday is 0)
-  const diffToMonday = now.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(now.getFullYear(), now.getMonth(), diffToMonday);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-
-  const toYMD = (d) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  return { from: toYMD(monday), to: toYMD(sunday) };
-}
-
 function formatDisplayDate(dateStr) {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
@@ -91,25 +62,29 @@ export default function DailyStatusPage() {
   const [selectedStudentId, setSelectedStudentId] = useState(null);
 
   const todayStr = getTodayString();
-  const isTodaySelected = fromDate === todayStr && toDate === todayStr;
-  const weekRange = useMemo(() => getWeekRange(), []);
-  const isThisWeekSelected = fromDate === weekRange.from && toDate === weekRange.to;
-  const isNext7DaysSelected = fromDate === todayStr && toDate === adjustDate(todayStr, 6);
 
-  const handlePreset = (type) => {
-    if (type === 'TODAY') {
-      const today = getTodayString();
-      setFromDate(today);
-      setToDate(today);
-    } else if (type === 'THIS_WEEK') {
-      const { from, to } = getWeekRange();
-      setFromDate(from);
-      setToDate(to);
-    } else if (type === 'NEXT_7_DAYS') {
-      const today = getTodayString();
-      setFromDate(today);
-      setToDate(adjustDate(today, 6));
+  const handleFromChange = (e) => {
+    const val = typeof e === 'object' && e?.target ? e.target.value : e;
+    if (!val) return;
+    // from must not exceed today
+    let finalVal = val > todayStr ? todayStr : val;
+    // from must not be greater than to
+    if (toDate && finalVal > toDate) {
+      finalVal = toDate;
     }
+    setFromDate(finalVal);
+  };
+
+  const handleToChange = (e) => {
+    const val = typeof e === 'object' && e?.target ? e.target.value : e;
+    if (!val) return;
+    // to should not be tomorrow, it should be till today
+    let finalVal = val > todayStr ? todayStr : val;
+    // from must not be greater than to
+    if (fromDate && finalVal < fromDate) {
+      setFromDate(finalVal);
+    }
+    setToDate(finalVal);
   };
 
   const fetchDailyStatus = async (fDate, tDate) => {
@@ -195,83 +170,31 @@ export default function DailyStatusPage() {
         </div>
 
         {/* From / To Date Filter Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto shrink-0 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
-          {/* Quick presets */}
-          <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border border-slate-200/80 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => handlePreset('TODAY')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                isTodaySelected
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePreset('THIS_WEEK')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                isThisWeekSelected
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              This Week
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePreset('NEXT_7_DAYS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                isNext7DaysSelected
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              Next 7D
-            </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 bg-slate-50 p-2 rounded-2xl border border-slate-200">
+          <div className="flex items-center space-x-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 pl-1">From</span>
+            <div className="relative w-36 sm:w-40">
+              <DatePicker
+                value={fromDate}
+                max={toDate || todayStr}
+                onChange={handleFromChange}
+                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
+              />
+            </div>
           </div>
 
-          <div className="hidden sm:block h-6 w-px bg-slate-200 mx-0.5" />
+          <span className="text-slate-400 font-bold text-xs">→</span>
 
-          {/* From / To Date Pickers */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <div className="flex items-center space-x-1.5">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">From</span>
-              <div className="relative w-36 sm:w-38">
-                <DatePicker
-                  value={fromDate}
-                  onChange={(e) => {
-                    const val = typeof e === 'object' && e?.target ? e.target.value : e;
-                    if (val) {
-                      setFromDate(val);
-                      if (toDate && val > toDate) setToDate(val);
-                    }
-                  }}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
-                />
-              </div>
-            </div>
-
-            <span className="text-slate-400 font-bold text-xs hidden sm:inline">→</span>
-
-            <div className="flex items-center space-x-1.5">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">To</span>
-              <div className="relative w-36 sm:w-38">
-                <DatePicker
-                  value={toDate}
-                  min={fromDate}
-                  onChange={(e) => {
-                    const val = typeof e === 'object' && e?.target ? e.target.value : e;
-                    if (val) {
-                      setToDate(val);
-                      if (fromDate && val < fromDate) setFromDate(val);
-                    }
-                  }}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
-                />
-              </div>
+          <div className="flex items-center space-x-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">To</span>
+            <div className="relative w-36 sm:w-40">
+              <DatePicker
+                value={toDate}
+                min={fromDate}
+                max={todayStr}
+                onChange={handleToChange}
+                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none shadow-2xs"
+              />
             </div>
           </div>
         </div>

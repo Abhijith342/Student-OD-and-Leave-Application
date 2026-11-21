@@ -131,6 +131,8 @@ export default function DatePicker({
     if (formatted.length === 10) {
       const iso = toIsoFormat(formatted);
       if (iso) {
+        if (min && iso < min) return;
+        if (max && iso > max) return;
         emitChange(iso);
         const d = new Date(iso);
         setViewYear(d.getFullYear());
@@ -148,6 +150,16 @@ export default function DatePicker({
     }
     const iso = toIsoFormat(inputValue);
     if (iso) {
+      if (min && iso < min) {
+        setInputValue(toDisplayFormat(min));
+        emitChange(min);
+        return;
+      }
+      if (max && iso > max) {
+        setInputValue(toDisplayFormat(max));
+        emitChange(max);
+        return;
+      }
       setInputValue(toDisplayFormat(iso));
       emitChange(iso);
     } else {
@@ -380,12 +392,12 @@ export default function DatePicker({
                     handleSelectDay(day);
                   }}
                   className={`h-8 w-8 mx-auto flex items-center justify-center text-xs font-semibold rounded-xl transition-all ${
-                    isSelected
+                    isDisabled
+                      ? 'text-slate-300 opacity-30 cursor-not-allowed pointer-events-none'
+                      : isSelected
                       ? 'bg-blue-600 text-white font-bold shadow-xs'
                       : isToday
                       ? 'border border-blue-600 text-blue-600 font-bold hover:bg-blue-50'
-                      : isDisabled
-                      ? 'text-slate-300 cursor-not-allowed'
                       : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
