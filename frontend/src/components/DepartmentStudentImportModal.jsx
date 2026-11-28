@@ -286,12 +286,12 @@ export default function DepartmentStudentImportModal({
               </div>
 
               {/* Errors Breakdown (if any) */}
-              {preview.errors && preview.errors.length > 0 && (
+              {(preview.errors || preview.errorRows) && (preview.errors || preview.errorRows).length > 0 && (
                 <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2 max-h-36 overflow-y-auto">
                   <span className="font-bold text-rose-800 block text-[11px]">Rows with validation errors (skipped):</span>
-                  {preview.errors.map((err, idx) => (
+                  {(preview.errors || preview.errorRows).map((err, idx) => (
                     <p key={idx} className="text-[10px] text-rose-700">
-                      Row {err.row}: <strong>{err.registerNumber || err.studentName}</strong> — {err.error}
+                      Row {err.row || err.rowNumber}: <strong>{err.registerNumber || err.studentName || err.name}</strong> — {err.error || (err.errors && err.errors.join('; '))}
                     </p>
                   ))}
                 </div>
@@ -312,7 +312,7 @@ export default function DepartmentStudentImportModal({
                     {preview.validRows.map((st, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/70">
                         <td className="p-2 font-mono font-bold text-slate-800">{st.registerNumber}</td>
-                        <td className="p-2 font-bold text-slate-900">{st.studentName}</td>
+                        <td className="p-2 font-bold text-slate-900">{st.studentName || st.name}</td>
                         <td className="p-2 font-bold text-blue-700">Yr {targetYear} - Sec {targetSection}</td>
                         <td className="p-2 text-slate-500 font-mono text-[11px]">{st.email}</td>
                       </tr>

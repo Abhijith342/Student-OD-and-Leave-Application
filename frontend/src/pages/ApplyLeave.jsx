@@ -279,7 +279,7 @@ export default function ApplyLeave() {
             <div className="flex items-center space-x-2">
               <Paperclip className="w-4 h-4 text-purple-600" />
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                Supporting Document (Medical Certificate / Parent Letter)
+                Supporting Document (Medical Certificate / Proof)
               </h3>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
@@ -305,7 +305,7 @@ export default function ApplyLeave() {
                 Choose a file or drag & drop here
               </h4>
               <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
-                Attach a medical certificate, prescription, or handwritten parent letter if applicable
+                Attach a medical certificate, prescription, or relevant proof if applicable
               </p>
               <p className="text-[10px] text-slate-400 font-mono mt-0.5">
                 PDF, PNG, JPG or JPEG (Max 5MB)

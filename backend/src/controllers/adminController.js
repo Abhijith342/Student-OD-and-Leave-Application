@@ -102,6 +102,15 @@ async function deleteStudent(req, res, next) {
   }
 }
 
+async function bulkDeleteStudents(req, res, next) {
+  try {
+    const result = await adminService.bulkDeleteStudents(req.user, req.body.ids);
+    res.status(200).json({ status: 'success', message: result.message, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getAllStaff(req, res, next) {
   try {
     const staff = await adminService.getAllStaff(req.query);
@@ -114,8 +123,19 @@ async function getAllStaff(req, res, next) {
 async function createStaff(req, res, next) {
   try {
     const payload = { ...req.body };
-    if (req.file) {
-      payload.profilePhoto = `/uploads/${req.file.filename}`;
+    if (req.files) {
+      if (req.files.profilePhoto?.[0]) {
+        payload.profilePhoto = `/uploads/${req.files.profilePhoto[0].filename}`;
+      }
+      if (req.files.signature?.[0]) {
+        payload.signature = `/uploads/${req.files.signature[0].filename}`;
+      }
+    } else if (req.file) {
+      if (req.file.fieldname === 'signature') {
+        payload.signature = `/uploads/${req.file.filename}`;
+      } else {
+        payload.profilePhoto = `/uploads/${req.file.filename}`;
+      }
     }
     const staff = await adminService.createStaff(req.user, payload);
     res.status(201).json({ status: 'success', message: 'Staff created successfully.', data: { staff } });
@@ -127,8 +147,19 @@ async function createStaff(req, res, next) {
 async function updateStaff(req, res, next) {
   try {
     const payload = { ...req.body };
-    if (req.file) {
-      payload.profilePhoto = `/uploads/${req.file.filename}`;
+    if (req.files) {
+      if (req.files.profilePhoto?.[0]) {
+        payload.profilePhoto = `/uploads/${req.files.profilePhoto[0].filename}`;
+      }
+      if (req.files.signature?.[0]) {
+        payload.signature = `/uploads/${req.files.signature[0].filename}`;
+      }
+    } else if (req.file) {
+      if (req.file.fieldname === 'signature') {
+        payload.signature = `/uploads/${req.file.filename}`;
+      } else {
+        payload.profilePhoto = `/uploads/${req.file.filename}`;
+      }
     }
     const staff = await adminService.updateStaff(req.user, req.params.id, payload);
     res.status(200).json({ status: 'success', message: 'Staff updated successfully.', data: { staff } });
@@ -167,6 +198,36 @@ async function removeStaffPhoto(req, res, next) {
   }
 }
 
+async function uploadStaffSignature(req, res, next) {
+  try {
+    if (!req.file) {
+      throw new AppError('Signature image file is required.', 400);
+    }
+    const signature = `/uploads/${req.file.filename}`;
+    const staff = await adminService.updateStaff(req.user, req.params.id, { signature });
+    res.status(200).json({
+      status: 'success',
+      message: 'Staff signature uploaded successfully.',
+      data: { staff, signature }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function removeStaffSignature(req, res, next) {
+  try {
+    const staff = await adminService.updateStaff(req.user, req.params.id, { signature: null });
+    res.status(200).json({
+      status: 'success',
+      message: 'Staff signature removed successfully.',
+      data: { staff, signature: null }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function toggleStaffStatus(req, res, next) {
   try {
     const result = await adminService.toggleStaffStatus(req.user, req.params.id, req.body.active);
@@ -180,6 +241,15 @@ async function deleteStaff(req, res, next) {
   try {
     const result = await adminService.deleteStaff(req.user, req.params.id);
     res.status(200).json({ status: 'success', message: result.message });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function bulkDeleteStaff(req, res, next) {
+  try {
+    const result = await adminService.bulkDeleteStaff(req.user, req.body.ids);
+    res.status(200).json({ status: 'success', message: result.message, data: result });
   } catch (error) {
     next(error);
   }
@@ -235,6 +305,15 @@ async function deleteDepartment(req, res, next) {
   try {
     const result = await adminService.deleteDepartment(req.user, req.params.id);
     res.status(200).json({ status: 'success', message: result.message });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function bulkDeleteDepartments(req, res, next) {
+  try {
+    const result = await adminService.bulkDeleteDepartments(req.user, req.body.ids, req.body.cascade);
+    res.status(200).json({ status: 'success', message: result.message, data: result });
   } catch (error) {
     next(error);
   }
@@ -307,6 +386,15 @@ async function deleteSection(req, res, next) {
   try {
     const result = await adminService.deleteSection(req.user, req.params.id);
     res.status(200).json({ status: 'success', message: result.message });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function bulkDeleteSections(req, res, next) {
+  try {
+    const result = await adminService.bulkDeleteSections(req.user, req.body.ids, req.body.force);
+    res.status(200).json({ status: 'success', message: result.message, data: result });
   } catch (error) {
     next(error);
   }
@@ -431,6 +519,7 @@ module.exports = {
   createStudent,
   updateStudent,
   deleteStudent,
+  bulkDeleteStudents,
   uploadStudentPhoto,
   removeStudentPhoto,
   toggleStudentStatus,
@@ -438,8 +527,11 @@ module.exports = {
   createStaff,
   updateStaff,
   deleteStaff,
+  bulkDeleteStaff,
   uploadStaffPhoto,
   removeStaffPhoto,
+  uploadStaffSignature,
+  removeStaffSignature,
   toggleStaffStatus,
   resetUserPassword,
   getAllDepartments,
@@ -447,6 +539,7 @@ module.exports = {
   updateDepartment,
   getDepartmentById,
   deleteDepartment,
+  bulkDeleteDepartments,
   getDepartmentYears,
   createDepartmentYear,
   updateDepartmentYear,
@@ -455,6 +548,7 @@ module.exports = {
   createYearSection,
   updateSection,
   deleteSection,
+  bulkDeleteSections,
   getAcademicStructure,
   bulkAssignStaff,
   uploadExcelPreview,

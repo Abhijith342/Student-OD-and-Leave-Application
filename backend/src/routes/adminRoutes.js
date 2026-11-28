@@ -22,6 +22,7 @@ router.get('/dashboard', adminController.getDashboardStats);
 
 // Student Management
 router.get('/students', adminController.getAllStudents);
+router.post('/students/bulk-delete', adminController.bulkDeleteStudents);
 router.get('/students/:id', adminController.getStudentById);
 router.post('/students', imageUpload.single('profilePhoto'), adminController.createStudent);
 router.put('/students/:id', imageUpload.single('profilePhoto'), adminController.updateStudent);
@@ -32,16 +33,20 @@ router.delete('/students/:id', adminController.deleteStudent);
 
 // Staff Management
 router.get('/staff', adminController.getAllStaff);
-router.post('/staff', imageUpload.single('profilePhoto'), adminController.createStaff);
-router.put('/staff/:id', imageUpload.single('profilePhoto'), adminController.updateStaff);
+router.post('/staff/bulk-delete', adminController.bulkDeleteStaff);
+router.post('/staff', imageUpload.fields([{ name: 'profilePhoto', maxCount: 1 }, { name: 'signature', maxCount: 1 }]), adminController.createStaff);
+router.put('/staff/:id', imageUpload.fields([{ name: 'profilePhoto', maxCount: 1 }, { name: 'signature', maxCount: 1 }]), adminController.updateStaff);
 router.post('/staff/:id/photo', imageUpload.single('profilePhoto'), adminController.uploadStaffPhoto);
 router.delete('/staff/:id/photo', adminController.removeStaffPhoto);
+router.post('/staff/:id/signature', imageUpload.single('signature'), adminController.uploadStaffSignature);
+router.delete('/staff/:id/signature', adminController.removeStaffSignature);
 router.patch('/staff/:id/status', adminController.toggleStaffStatus);
 router.delete('/staff/:id', adminController.deleteStaff);
 router.post('/users/:userId/reset-password', adminController.resetUserPassword);
 
 // Department Hierarchy Management (Department -> Study Year -> Section)
 router.get('/departments', adminController.getAllDepartments);
+router.post('/departments/bulk-delete', adminController.bulkDeleteDepartments);
 router.get('/departments/:id', adminController.getDepartmentById);
 router.post('/departments', adminController.createDepartment);
 router.put('/departments/:id', adminController.updateDepartment);
@@ -58,6 +63,7 @@ router.get('/years/:yearId/sections', adminController.getYearSections);
 router.post('/years/:yearId/sections', adminController.createYearSection);
 router.get('/departments/:departmentId/years/:yearId/sections', adminController.getYearSections);
 router.post('/departments/:departmentId/years/:yearId/sections', adminController.createYearSection);
+router.post('/sections/bulk-delete', adminController.bulkDeleteSections);
 router.put('/sections/:id', adminController.updateSection);
 router.delete('/sections/:id', adminController.deleteSection);
 

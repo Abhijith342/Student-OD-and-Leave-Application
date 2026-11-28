@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
+const config = require('../config');
 
 function formatDateDDMMYYYY(dateInput) {
   if (!dateInput) return '-';
@@ -211,7 +212,7 @@ function generateApplicationPDF(application, res) {
   doc.y = currentTableRowY + 25;
 
   // 7. Official Signatures & Institutional Seal Block
-  const sigY = Math.max(doc.y, 680);
+  const sigY = Math.max(doc.y, 675);
   doc
     .fontSize(10)
     .font('Helvetica-Bold')
@@ -219,22 +220,65 @@ function generateApplicationPDF(application, res) {
     .text('AUTHORIZATION SIGNATURES & STAMPS', 40, sigY)
     .moveDown(0.5);
 
-  const sigBlockY = doc.y + 10;
+  const sigBlockY = sigY + 18;
 
-  doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Tutor Approval', 40, sigBlockY);
-  doc.font('Helvetica-Oblique').fillColor('#64748B').text('[ Electronically Verified ]', 40, sigBlockY + 25);
+  // Helper to render signature or fallback
+  const renderSignatureItem = (title, staff, action, xPos, blockWidth, isSeal = false, sealText = '', sealColor = '') => {
+    doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text(title, xPos, sigBlockY, { width: blockWidth });
 
-  doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Class Advisor Approval', 170, sigBlockY);
-  doc.font('Helvetica-Oblique').fillColor('#64748B').text('[ Electronically Verified ]', 170, sigBlockY + 25);
+    let drawn = false;
+    if (staff?.signature) {
+      const filename = String(staff.signature).replace(/^\/uploads\//, '');
+      const fullPath = path.join(config.uploadDir, filename);
+      if (fs.existsSync(fullPath)) {
+        try {
+          doc.image(fullPath, xPos, sigBlockY + 12, { fit: [Math.min(blockWidth - 10, 85), 28] });
+          drawn = true;
+        } catch (e) {
+          console.error('Signature embed error:', e);
+        }
+      }
+    }
 
-  doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Head of Department (HOD)', 320, sigBlockY);
-  doc.rect(320, sigBlockY + 15, 75, 25).stroke('#2563EB');
-  doc.fontSize(7).font('Helvetica-Bold').fillColor(secondaryColor).text('HOD SEAL', 335, sigBlockY + 23);
+    if (!drawn) {
+      if (isSeal) {
+        doc.rect(xPos, sigBlockY + 14, 75, 24).stroke(sealColor || '#2563EB');
+        doc.fontSize(7).font('Helvetica-Bold').fillColor(sealColor || '#2563EB').text(sealText, xPos + 10, sigBlockY + 22);
+      } else {
+        doc.fontSize(7.5).font('Helvetica-Oblique').fillColor('#64748B').text('[ Electronically Verified ]', xPos, sigBlockY + 20);
+      }
+    }
+
+    const nameY = sigBlockY + 44;
+    if (staff?.name) {
+      doc.fontSize(7.5).font('Helvetica-Bold').fillColor(textDark).text(staff.name, xPos, nameY, { width: blockWidth, ellipsis: true });
+    }
+    if (action?.timestamp) {
+      doc.fontSize(6.5).font('Helvetica').fillColor('#64748B').text(formatDateDDMMYYYY(action.timestamp), xPos, nameY + 9);
+    }
+  };
+
+  const tutorAction = application.approvalHistories?.find(h => h.role === 'TUTOR' && (h.action === 'APPROVED' || h.action === 'COMPLETED'));
+  const tutorStaff = tutorAction?.staff || application.student?.tutor;
+
+  const advisorAction = application.approvalHistories?.find(h => h.role === 'CLASS_ADVISOR' && (h.action === 'APPROVED' || h.action === 'COMPLETED' || h.action === 'CONFIRMED_FORWARDED'));
+  const advisorStaff = advisorAction?.staff || application.student?.classAdvisor;
+
+  const hodAction = application.approvalHistories?.find(h => h.role === 'HOD' && (h.action === 'APPROVED' || h.action === 'COMPLETED'));
+  const hodStaff = hodAction?.staff || application.student?.hod;
 
   if (isOD) {
-    doc.fontSize(8).font('Helvetica-Bold').fillColor(textDark).text('Principal Office Seal', 450, sigBlockY);
-    doc.rect(450, sigBlockY + 15, 80, 25).stroke('#16A34A');
-    doc.fontSize(7).font('Helvetica-Bold').fillColor('#16A34A').text('PRINCIPAL SEAL', 458, sigBlockY + 23);
+    const principalAction = application.approvalHistories?.find(h => h.role === 'PRINCIPAL_OFFICE' && (h.action === 'APPROVED' || h.action === 'COMPLETED'));
+    const principalStaff = principalAction?.staff;
+
+    renderSignatureItem('Tutor Approval', tutorStaff, tutorAction, 40, 115);
+    renderSignatureItem('Class Advisor', advisorStaff, advisorAction, 168, 115);
+    renderSignatureItem('HOD Approval', hodStaff, hodAction, 296, 115, true, 'HOD SEAL', '#2563EB');
+    renderSignatureItem('Principal Office', principalStaff, principalAction, 424, 115, true, 'PRINCIPAL SEAL', '#16A34A');
+  } else {
+    renderSignatureItem('Tutor Approval', tutorStaff, tutorAction, 50, 150);
+    renderSignatureItem('Class Advisor Approval', advisorStaff, advisorAction, 220, 150);
+    renderSignatureItem('Head of Department (HOD)', hodStaff, hodAction, 390, 150, true, 'HOD SEAL', '#2563EB');
   }
 
   doc.end();

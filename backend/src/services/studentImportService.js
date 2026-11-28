@@ -12,9 +12,62 @@ function normalizeRowKeys(row) {
   return normalized;
 }
 
+function getStudentName(norm = {}, rawRow = {}) {
+  // Direct common keys
+  if (norm.studentname) return String(norm.studentname).trim();
+  if (norm.name) return String(norm.name).trim();
+  if (norm.student) return String(norm.student).trim();
+  if (norm.fullname) return String(norm.fullname).trim();
+  if (norm.nameofthestudent) return String(norm.nameofthestudent).trim();
+  if (norm.nameofstudent) return String(norm.nameofstudent).trim();
+  if (norm.studentsname) return String(norm.studentsname).trim();
+  if (norm.candidatename) return String(norm.candidatename).trim();
+
+  // Normalized key scan
+  for (const [k, v] of Object.entries(norm)) {
+    if ((k.includes('student') && k.includes('name')) || k === 'name' || k.includes('fullname')) {
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  }
+
+  // Raw row scan
+  for (const [k, v] of Object.entries(rawRow)) {
+    const lk = k.toLowerCase();
+    if (lk.includes('name') && !lk.includes('father') && !lk.includes('mother') && !lk.includes('parent') && !lk.includes('tutor') && !lk.includes('advisor') && !lk.includes('hod') && !lk.includes('user')) {
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  }
+
+  return '';
+}
+
+function getRegisterNumber(norm = {}, rawRow = {}) {
+  if (norm.registernumber) return String(norm.registernumber).trim();
+  if (norm.registerno) return String(norm.registerno).trim();
+  if (norm.regno) return String(norm.regno).trim();
+  if (norm.registrationnumber) return String(norm.registrationnumber).trim();
+  if (norm.regnumber) return String(norm.regnumber).trim();
+  if (norm.register) return String(norm.register).trim();
+
+  for (const [k, v] of Object.entries(norm)) {
+    if (k.includes('register') || k.includes('regno') || k.includes('regnum')) {
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  }
+
+  for (const [k, v] of Object.entries(rawRow)) {
+    const lk = k.toLowerCase();
+    if (lk.includes('register') || lk.includes('reg. no') || lk.includes('reg no')) {
+      if (v && String(v).trim()) return String(v).trim();
+    }
+  }
+
+  return '';
+}
+
 function isBoilerplateOrEmpty(norm, rawRow = {}) {
-  const regNo = String(norm.registernumber || norm.registerno || norm.regno || norm.registrationnumber || '').trim();
-  const studentName = String(norm.studentname || norm.name || norm.student || '').trim();
+  const regNo = getRegisterNumber(norm, rawRow);
+  const studentName = getStudentName(norm, rawRow);
 
   // If no register number AND no student name -> empty row
   if (!regNo && !studentName) return true;
@@ -160,9 +213,9 @@ async function validateStudentImportData(jsonRows, options = {}) {
   }
 
   // Verify that required column headers exist across sample row
-  const firstSampleNorm = cleanRows[0].norm;
-  const hasStudentNameCol = Boolean(firstSampleNorm.studentname || firstSampleNorm.name || firstSampleNorm.student);
-  const hasRegisterCol = Boolean(firstSampleNorm.registernumber || firstSampleNorm.registerno || firstSampleNorm.regno || firstSampleNorm.registrationnumber);
+  const firstSample = cleanRows[0];
+  const hasStudentNameCol = Boolean(getStudentName(firstSample.norm, firstSample.raw));
+  const hasRegisterCol = Boolean(getRegisterNumber(firstSample.norm, firstSample.raw));
 
   if (!hasStudentNameCol) {
     throw new AppError('Missing required column header in Excel: "Student Name"', 400);
@@ -195,8 +248,8 @@ async function validateStudentImportData(jsonRows, options = {}) {
   cleanRows.forEach(({ raw, norm, originalIndex }) => {
     const rowNum = originalIndex + 2;
 
-    const studentName = String(norm.studentname || norm.name || norm.student || '').trim();
-    const registerNumber = String(norm.registernumber || norm.registerno || norm.regno || norm.registrationnumber || '').trim().toUpperCase();
+    const studentName = getStudentName(norm, raw);
+    const registerNumber = getRegisterNumber(norm, raw).toUpperCase();
     const rollNumber = String(norm.rollnumber || norm.rollno || norm.roll || registerNumber).trim().toUpperCase();
 
     const deptName = String(norm.department || norm.dept || norm.branch || (targetDept ? targetDept.name : '')).trim();
@@ -308,19 +361,26 @@ async function validateStudentImportData(jsonRows, options = {}) {
     if (rowErrors.length > 0) {
       errors.push({
         row: rowNum,
+        rowNumber: rowNum,
         studentName,
+        name: studentName,
         registerNumber,
         email,
-        error: rowErrors.join(' | ')
+        error: rowErrors.join(' | '),
+        errors: rowErrors
       });
     } else {
       validRows.push({
         row: rowNum,
+        rowNumber: rowNum,
         studentName,
+        name: studentName,
         registerNumber,
         rollNumber,
         deptId: matchedDept ? matchedDept.id : null,
         deptCode: matchedDept ? matchedDept.code : 'AI_DS',
+        departmentCode: matchedDept ? matchedDept.code : 'AI_DS',
+        departmentName: matchedDept ? matchedDept.name : (targetDept?.name || 'AI & DS'),
         year,
         section,
         email,
@@ -340,7 +400,8 @@ async function validateStudentImportData(jsonRows, options = {}) {
     validCount: validRows.length,
     errorCount: errors.length,
     validRows,
-    errors
+    errors,
+    errorRows: errors
   };
 }
 
@@ -549,7 +610,7 @@ async function executeStudentImport(validRows) {
       await tx.student.upsert({
         where: { registerNumber: item.registerNumber },
         update: {
-          name: item.studentName,
+          name: item.studentName || item.name,
           rollNumber: item.rollNumber,
           email: item.email,
           studentPhone: item.studentPhone,
@@ -567,7 +628,7 @@ async function executeStudentImport(validRows) {
           userId: user.id,
           registerNumber: item.registerNumber,
           rollNumber: item.rollNumber,
-          name: item.studentName,
+          name: item.studentName || item.name,
           email: item.email,
           studentPhone: item.studentPhone,
           parentPhone: item.parentPhone,

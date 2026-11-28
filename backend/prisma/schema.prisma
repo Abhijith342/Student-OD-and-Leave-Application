@@ -164,6 +164,7 @@ model Staff {
   department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   role         Role
   profilePhoto String?
+  signature    String?
 
   tutoredStudents    Student[]            @relation("StudentTutor")
   advisedStudents    Student[]            @relation("StudentClassAdvisor")

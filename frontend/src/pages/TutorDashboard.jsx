@@ -16,12 +16,22 @@ import {
   Filter,
   Calendar,
   Building2,
-  FileText
+  FileText,
+  AlertCircle,
+  History,
+  CheckCircle2,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
 import { calculateDurationDays, formatDateRange } from '../utils/dateUtils';
 
 export default function TutorDashboard() {
-  const [activeTab, setActiveTab] = useState('tutor'); // 'tutor' | 'advisor' | 'od-tracker' | 'all'
+  // activeTab: 'batchOD' (Primary) | 'queues' (Request Queues) | 'all' (Available OD/Leave Directory)
+  const [activeTab, setActiveTab] = useState('batchOD');
+  
+  // queueSubTab: 'tutor' | 'advisor' | 'history'
+  const [queueSubTab, setQueueSubTab] = useState('tutor');
+
   const [tutorApps, setTutorApps] = useState([]);
   const [advisorApps, setAdvisorApps] = useState([]);
   const [availableApps, setAvailableApps] = useState([]);
@@ -31,12 +41,12 @@ export default function TutorDashboard() {
   // OD Scope for Tracker: 'all' (Department) or 'mine' (My Tutored Students)
   const [odScope, setOdScope] = useState('all');
 
-  // Search & Filter for All Available Applications
+  // Search & Filter for All Available Applications Directory
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' | 'OD' | 'LEAVE'
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
-  // Review state
+  // Review modal state
   const [reviewModalApp, setReviewModalApp] = useState(null);
   const [reviewRole, setReviewRole] = useState('tutor'); // 'tutor' | 'advisor'
   const [remarks, setRemarks] = useState('');
@@ -72,17 +82,11 @@ export default function TutorDashboard() {
   const pendingAdvisorApps = advisorApps.filter(a => a.currentStage === 'ADVISOR_PENDING');
   const processedAdvisorApps = advisorApps.filter(a => a.currentStage !== 'ADVISOR_PENDING');
 
+  const totalPending = pendingTutorApps.length + pendingAdvisorApps.length;
+
   // OD Metrics
   const tutorODApps = useMemo(() => tutorApps.filter(a => a.type === 'OD'), [tutorApps]);
   const allDeptODApps = useMemo(() => availableApps.filter(a => a.type === 'OD'), [availableApps]);
-
-  const uniqueTutorODStudents = useMemo(() => {
-    return new Set(
-      tutorODApps
-        .filter(a => a.status === 'APPROVED' || a.currentStage === 'COMPLETED' || a.currentStage === 'PRINCIPAL_PENDING')
-        .map(a => a.studentId || a.student?.id || a.student?.registerNumber)
-    ).size;
-  }, [tutorODApps]);
 
   const uniqueAllDeptODStudents = useMemo(() => {
     return new Set(
@@ -159,148 +163,465 @@ export default function TutorDashboard() {
     }
   };
 
+  const scrollToQueues = () => {
+    const el = document.getElementById('request-queues-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      setActiveTab('queues');
+    }
+  };
+
+  // Reusable Request Queues Component
+  const renderRequestQueuesSection = () => {
+    const hasAdvisorRole = advisorApps.length > 0;
+    const currentQueueItems = queueSubTab === 'advisor' ? pendingAdvisorApps : pendingTutorApps;
+    const currentRole = queueSubTab === 'advisor' ? 'advisor' : 'tutor';
+    const processedHistory = queueSubTab === 'advisor' ? processedAdvisorApps : processedTutorApps;
+
+    return (
+      <div id="request-queues-section" className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Section Header */}
+        <div className="p-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-amber-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center space-x-2 text-blue-600 font-bold text-xs uppercase tracking-wider mb-1">
+              <ClipboardCheck className="w-4 h-4 text-blue-600" />
+              <span>Review & Approval Section</span>
+            </div>
+            <h3 className="text-lg font-black text-slate-900">
+              Staff Request Queues
+            </h3>
+            <p className="text-xs text-slate-500">
+              Dedicated queue for reviewing, endorsing, and approving student OD and Leave requests
+            </p>
+          </div>
+
+          {/* Queue Sub-Tabs */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 overflow-x-auto">
+            <button
+              onClick={() => setQueueSubTab('tutor')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 shrink-0 ${
+                queueSubTab === 'tutor'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Tutor Queue</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                queueSubTab === 'tutor' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {pendingTutorApps.length}
+              </span>
+            </button>
+
+            {hasAdvisorRole && (
+              <button
+                onClick={() => setQueueSubTab('advisor')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 shrink-0 ${
+                  queueSubTab === 'advisor'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                <span>Advisor Queue</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  queueSubTab === 'advisor' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {pendingAdvisorApps.length}
+                </span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setQueueSubTab('history')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 shrink-0 ${
+                queueSubTab === 'history'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>History</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                queueSubTab === 'history' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {processedTutorApps.length + (hasAdvisorRole ? processedAdvisorApps.length : 0)}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Content of Request Queues */}
+        {queueSubTab === 'history' ? (
+          /* Processed History Table */
+          <div className="overflow-x-auto">
+            <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">
+                Recently Processed Tutored & Advised Applications
+              </span>
+              <span className="text-xs text-slate-500">
+                Showing {processedTutorApps.length + processedAdvisorApps.length} records
+              </span>
+            </div>
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
+                <tr>
+                  <th className="p-3.5">App ID</th>
+                  <th className="p-3.5">Student Name</th>
+                  <th className="p-3.5">Type</th>
+                  <th className="p-3.5">Reason / Event</th>
+                  <th className="p-3.5">Current Stage</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...processedTutorApps, ...processedAdvisorApps].length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="p-8 text-center text-slate-400">
+                      No processed applications yet.
+                    </td>
+                  </tr>
+                ) : (
+                  [...processedTutorApps, ...processedAdvisorApps].map((app) => (
+                    <tr key={app.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="p-3.5 font-bold font-mono text-slate-900">#{app.applicationNumber}</td>
+                      <td className="p-3.5 font-medium">
+                        <div className="font-bold text-slate-800">{app.student?.name}</div>
+                        <div className="text-[11px] text-slate-500">{app.student?.registerNumber}</div>
+                      </td>
+                      <td className="p-3.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          app.type === 'OD' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {app.type}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-slate-700 max-w-xs truncate" title={app.eventName || app.reason}>
+                        {app.eventName || app.reason}
+                      </td>
+                      <td className="p-3.5 whitespace-nowrap"><StageBadge stage={app.currentStage} /></td>
+                      <td className="p-3.5 whitespace-nowrap"><StatusBadge status={app.status} /></td>
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => setSelectedApp(app)}
+                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-colors"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Active Pending Queue List */
+          <div>
+            {loading ? (
+              <div className="p-10 text-center text-xs text-slate-500">Loading queue applications...</div>
+            ) : currentQueueItems.length === 0 ? (
+              <div className="p-12 text-center text-slate-500">
+                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
+                <p className="font-bold text-sm text-slate-800">
+                  {queueSubTab === 'advisor'
+                    ? 'All Class Advisor reviews complete!'
+                    : 'All Tutor reviews complete!'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  There are currently no pending OD or Leave applications in this queue.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {currentQueueItems.map((app) => (
+                  <div key={app.id} className="p-4 sm:p-5 hover:bg-slate-50 transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-slate-900 font-mono text-sm">#{app.applicationNumber}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          app.type === 'OD' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {app.type}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800">{app.student?.name}</span>
+                        <span className="text-xs text-slate-500">({app.student?.registerNumber})</span>
+                        {app.student?.section && (
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            • Sec {app.student?.section?.name}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-slate-700">
+                        <span className="font-bold text-slate-900">Reason / Event: </span>
+                        {app.eventName ? (
+                          <span>
+                            <strong className="text-blue-700">{app.eventName}</strong> — {app.reason}
+                          </span>
+                        ) : (
+                          app.reason
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Dates: {formatDateRange(app.fromDate, app.toDate)}</span>
+                          <span className="font-bold text-indigo-600">({calculateDurationDays(app.fromDate, app.toDate)})</span>
+                        </div>
+
+                        {app.venue && (
+                          <div className="flex items-center space-x-1">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Venue: {app.venue}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Verification Status Badges */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {queueSubTab === 'advisor' && (
+                          <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center space-x-1">
+                            <span>✓</span>
+                            <span>Tutor Approved by {app.approvalHistories?.find(h => h.role === 'TUTOR')?.staff?.name || 'Assigned Tutor'}</span>
+                          </span>
+                        )}
+                        {app.documentPath && (
+                          <span className="text-[11px] text-slate-600 font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-200 flex items-center space-x-1">
+                            <span>📎</span>
+                            <span>Proof Attached</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <button
+                        onClick={() => setSelectedApp(app)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+                      >
+                        Details
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setReviewModalApp(app);
+                          setReviewAction('APPROVE');
+                          setReviewRole(currentRole);
+                          setRemarks('');
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1 transition-all"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Approve</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setReviewModalApp(app);
+                          setReviewAction('REJECT');
+                          setReviewRole(currentRole);
+                          setRemarks('');
+                        }}
+                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1 transition-all"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Reject</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Role Navigation Tabs */}
+      {/* Top Primary Navigation Bar */}
       <div className="flex border-b border-slate-200 space-x-2 overflow-x-auto pb-1">
+        {/* PRIMARY TAB: Batch OD & Hackathons */}
         <button
-          onClick={() => setActiveTab('tutor')}
-          className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-colors flex items-center space-x-2 shrink-0 ${
-            activeTab === 'tutor'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          <UserCheck className="w-4 h-4" />
-          <span>Tutor Review Queue ({pendingTutorApps.length})</span>
-        </button>
-
-        {advisorApps.length > 0 && (
-          <button
-            onClick={() => setActiveTab('advisor')}
-            className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-colors flex items-center space-x-2 shrink-0 ${
-              activeTab === 'advisor'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            <span>Class Advisor Review Queue ({pendingAdvisorApps.length})</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveTab('od-tracker')}
-          className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-colors flex items-center space-x-2 shrink-0 ${
-            activeTab === 'od-tracker'
+          onClick={() => setActiveTab('batchOD')}
+          className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center space-x-2 shrink-0 ${
+            activeTab === 'batchOD'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
           }`}
         >
           <Trophy className="w-4 h-4 text-amber-400" />
-          <span>Batch OD & Hackathons ({allDeptODApps.length})</span>
+          <span>Batch OD & Hackathons (Primary)</span>
         </button>
 
+        {/* DEDICATED QUEUE TAB: Request Queues */}
+        <button
+          onClick={() => setActiveTab('queues')}
+          className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center space-x-2 shrink-0 ${
+            activeTab === 'queues'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4" />
+          <span>Request Queues</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            totalPending > 0
+              ? activeTab === 'queues' ? 'bg-amber-400 text-amber-950' : 'bg-amber-500 text-white'
+              : activeTab === 'queues' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {totalPending}
+          </span>
+        </button>
+
+        {/* DIRECTORY TAB: Available OD / Leave */}
         <button
           onClick={() => setActiveTab('all')}
-          className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-colors flex items-center space-x-2 shrink-0 ${
+          className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all flex items-center space-x-2 shrink-0 ${
             activeTab === 'all'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>Available OD / Leave ({availableApps.length})</span>
+          <span>All OD / Leave ({availableApps.length})</span>
         </button>
       </div>
 
       {/* Header Banner */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center space-x-2 text-blue-600 font-bold text-xs uppercase tracking-wider mb-1">
-            {activeTab === 'advisor' ? (
-              <ClipboardCheck className="w-4 h-4" />
-            ) : activeTab === 'od-tracker' ? (
-              <Trophy className="w-4 h-4 text-amber-500" />
-            ) : activeTab === 'all' ? (
-              <Layers className="w-4 h-4 text-blue-600" />
-            ) : (
-              <UserCheck className="w-4 h-4" />
-            )}
-            <span>
-              {activeTab === 'advisor'
-                ? 'Class Advisor Portal'
-                : activeTab === 'od-tracker'
-                ? 'On-Duty Hackathon Central'
-                : activeTab === 'all'
-                ? 'Department Applications Central'
-                : 'Tutor Portal'}
-            </span>
+          <div className="flex items-center space-x-2 text-indigo-600 font-bold text-xs uppercase tracking-wider mb-1">
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <span>Staff Portal • Batch OD Command Center</span>
           </div>
           <h2 className="text-xl font-black text-slate-900">
-            {activeTab === 'advisor'
-              ? 'Class Advisor Approval Queue'
-              : activeTab === 'od-tracker'
-              ? 'Batch On-Duty (OD) & Hackathon Tracking'
-              : activeTab === 'all'
-              ? 'All Available Student OD & Leave Applications'
-              : 'Tutor Approval Queue'}
+            {activeTab === 'batchOD'
+              ? 'Batch On-Duty (OD) & Hackathons Hub'
+              : activeTab === 'queues'
+              ? 'Staff Review & Approval Queues'
+              : 'Available Student OD & Leave Applications'}
           </h2>
           <p className="text-xs text-slate-500">
-            {activeTab === 'advisor'
-              ? 'Review applications for your advised class and forward to HOD'
-              : activeTab === 'od-tracker'
-              ? 'Real-time overview of students attending hackathons, duration, and venues across the department'
-              : activeTab === 'all'
-              ? 'Visit and monitor all student OD & Leave applications across the department with full live status'
-              : 'Review applications for your assigned tutored students'}
+            {activeTab === 'batchOD'
+              ? 'Real-time monitoring of students attending hackathons, duration, and host venues across the department'
+              : activeTab === 'queues'
+              ? 'Review pending student OD and Leave applications for your tutored students and advised class'
+              : 'Complete directory of student OD & Leave applications across the department'}
           </p>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stat Action Badges */}
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          <div className="px-3 sm:px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl text-center">
-            <span className="text-[10px] uppercase font-bold text-amber-600 block">Pending Review</span>
-            <span className="text-base sm:text-lg font-black text-amber-700">
-              {activeTab === 'advisor' ? pendingAdvisorApps.length : pendingTutorApps.length}
-            </span>
-          </div>
-
-          <div className="px-3 sm:px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-center">
-            <span className="text-[10px] uppercase font-bold text-slate-500 block">Available Total</span>
-            <span className="text-base sm:text-lg font-black text-slate-700">
-              {availableApps.length}
-            </span>
-          </div>
-
+          {/* Confirmed on OD */}
           <button
-            onClick={() => setActiveTab('od-tracker')}
+            onClick={() => setActiveTab('batchOD')}
             className={`px-3 sm:px-4 py-2 rounded-xl text-center border transition-all cursor-pointer ${
-              activeTab === 'od-tracker'
+              activeTab === 'batchOD'
                 ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
                 : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200'
             }`}
-            title="Click to view Batch On-Duty & Hackathon Tracker"
+            title="Click to view Batch OD Tracker"
           >
             <span className={`text-[10px] uppercase font-bold flex items-center justify-center space-x-1 ${
-              activeTab === 'od-tracker' ? 'text-indigo-200' : 'text-indigo-600'
+              activeTab === 'batchOD' ? 'text-indigo-200' : 'text-indigo-600'
             }`}>
               <Trophy className="w-3 h-3 text-amber-400" />
               <span>Students on OD</span>
             </span>
             <span className={`text-base sm:text-lg font-black ${
-              activeTab === 'od-tracker' ? 'text-white' : 'text-indigo-700'
+              activeTab === 'batchOD' ? 'text-white' : 'text-indigo-700'
             }`}>
               {uniqueAllDeptODStudents}
+            </span>
+          </button>
+
+          {/* Pending in Queues */}
+          <button
+            onClick={() => {
+              if (activeTab === 'batchOD') scrollToQueues();
+              else setActiveTab('queues');
+            }}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-center border transition-all cursor-pointer ${
+              totalPending > 0
+                ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+            title="Click to view Request Queues"
+          >
+            <span className="text-[10px] uppercase font-bold text-amber-600 flex items-center justify-center space-x-1">
+              <Clock className="w-3 h-3 text-amber-500" />
+              <span>Awaiting Review</span>
+            </span>
+            <span className="text-base sm:text-lg font-black text-amber-700 flex items-center justify-center space-x-1">
+              {totalPending > 0 && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />}
+              <span>{totalPending}</span>
+            </span>
+          </button>
+
+          {/* Total Available */}
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-center border transition-all cursor-pointer ${
+              activeTab === 'all'
+                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+            }`}
+            title="Click to view All Applications"
+          >
+            <span className={`text-[10px] uppercase font-bold block ${
+              activeTab === 'all' ? 'text-blue-100' : 'text-slate-500'
+            }`}>
+              Total Records
+            </span>
+            <span className={`text-base sm:text-lg font-black ${
+              activeTab === 'all' ? 'text-white' : 'text-slate-700'
+            }`}>
+              {availableApps.length}
             </span>
           </button>
         </div>
       </div>
 
-      {/* OD TRACKER VIEW */}
-      {activeTab === 'od-tracker' && (
-        <div className="space-y-4">
-          {/* Scope Selector: All Department ODs vs My Tutored Students */}
+      {/* VIEW 1: BATCH OD & HACKATHONS (PRIMARY) */}
+      {activeTab === 'batchOD' && (
+        <div className="space-y-6">
+          {/* Pending Action Notification Banner (if any pending) */}
+          {totalPending > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5 text-amber-600 animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-amber-900">
+                    You have {totalPending} application{totalPending > 1 ? 's' : ''} awaiting review in your Request Queues
+                  </p>
+                  <p className="text-[11px] text-amber-700">
+                    {pendingTutorApps.length > 0 && `${pendingTutorApps.length} pending Tutor review`}
+                    {pendingTutorApps.length > 0 && pendingAdvisorApps.length > 0 && ' • '}
+                    {pendingAdvisorApps.length > 0 && `${pendingAdvisorApps.length} pending Advisor review`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={scrollToQueues}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center space-x-1 shrink-0"
+              >
+                <span>Jump to Request Queues</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* OD Scope Selector */}
           <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
             <div className="flex items-center space-x-2 text-xs font-bold text-slate-700">
               <Filter className="w-4 h-4 text-indigo-600" />
@@ -330,6 +651,7 @@ export default function TutorDashboard() {
             </div>
           </div>
 
+          {/* Primary Batch OD & Hackathons Tracker */}
           <BatchODTracker
             applications={odScope === 'all' ? allDeptODApps : tutorODApps}
             batchTitle={odScope === 'all' ? "Department-Wide On-Duty (OD) & Hackathons" : "Tutor Batch On-Duty (OD) & Hackathons"}
@@ -339,10 +661,22 @@ export default function TutorDashboard() {
             onViewDetails={setSelectedApp}
             roleName="TUTOR"
           />
+
+          {/* THEN: Dedicated Request Queues Section */}
+          <div className="pt-2">
+            {renderRequestQueuesSection()}
+          </div>
         </div>
       )}
 
-      {/* TAB 4: ALL AVAILABLE OD & LEAVE APPLICATIONS VIEW */}
+      {/* VIEW 2: DEDICATED REQUEST QUEUES SECTION FOCUS */}
+      {activeTab === 'queues' && (
+        <div className="space-y-4">
+          {renderRequestQueuesSection()}
+        </div>
+      )}
+
+      {/* VIEW 3: ALL AVAILABLE APPLICATIONS DIRECTORY */}
       {activeTab === 'all' && (
         <div className="space-y-4">
           {/* Filter & Search Bar */}
@@ -502,306 +836,6 @@ export default function TutorDashboard() {
         </div>
       )}
 
-      {/* TUTOR TAB VIEW */}
-      {activeTab === 'tutor' && (
-        <>
-          {/* Pending Tutor Applications */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-amber-50/40 flex items-center justify-between">
-              <h3 className="font-bold text-amber-900 text-sm flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-amber-600" />
-                <span>Applications Awaiting Your Tutor Review ({pendingTutorApps.length})</span>
-              </h3>
-            </div>
-
-            {loading ? (
-              <div className="p-8 text-center text-xs text-slate-500">Loading queue...</div>
-            ) : pendingTutorApps.length === 0 ? (
-              <div className="p-10 text-center text-slate-500">
-                <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-                <p className="font-bold text-sm text-slate-800">All tutor reviews complete!</p>
-                <p className="text-xs text-slate-400 mt-0.5">No pending OD or Leave applications in your queue.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {pendingTutorApps.map((app) => (
-                  <div key={app.id} className="p-4 hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-900 text-sm">#{app.applicationNumber}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          app.type === 'OD' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {app.type}
-                        </span>
-                        <span className="text-xs font-bold text-slate-800">{app.student?.name}</span>
-                        <span className="text-xs text-slate-400">({app.student?.registerNumber})</span>
-                      </div>
-
-                      <p className="text-xs text-slate-700">
-                        <strong>Reason:</strong> {app.eventName ? `${app.eventName} - ${app.reason}` : app.reason}
-                      </p>
-
-                      <p className="text-xs text-slate-500">
-                        <strong>Dates:</strong> {formatDateRange(app.fromDate, app.toDate)}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <button
-                        onClick={() => setSelectedApp(app)}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
-                      >
-                        View Details
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setReviewModalApp(app);
-                          setReviewAction('APPROVE');
-                          setReviewRole('tutor');
-                          setRemarks('');
-                        }}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>Approve</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setReviewModalApp(app);
-                          setReviewAction('REJECT');
-                          setReviewRole('tutor');
-                          setRemarks('');
-                        }}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Processed Tutor History */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-sm">Recently Processed Tutored Applications</h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="p-3.5">App ID</th>
-                    <th className="p-3.5">Student Name</th>
-                    <th className="p-3.5">Type</th>
-                    <th className="p-3.5">Current Stage</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {processedTutorApps.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="p-6 text-center text-slate-400">
-                        No processed applications yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    processedTutorApps.map((app) => (
-                      <tr key={app.id} className="hover:bg-slate-50">
-                        <td className="p-3.5 font-bold">#{app.applicationNumber}</td>
-                        <td className="p-3.5 font-medium">{app.student?.name} ({app.student?.registerNumber})</td>
-                        <td className="p-3.5"><span className="font-bold text-blue-600">{app.type}</span></td>
-                        <td className="p-3.5"><StageBadge stage={app.currentStage} /></td>
-                        <td className="p-3.5"><StatusBadge status={app.status} /></td>
-                        <td className="p-3.5 text-right">
-                          <button
-                            onClick={() => setSelectedApp(app)}
-                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 font-bold rounded"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Embedded Batch OD Tracker for Tutored Batch */}
-          <div className="pt-2">
-            <BatchODTracker
-              applications={tutorApps}
-              batchTitle="Tutored Batch On-Duty & Hackathon Tracker"
-              batchSubtitle="Live status of hackathons, dates, duration in days, and venues for students in your assigned tutored batch"
-              onViewDetails={setSelectedApp}
-              roleName="TUTOR"
-            />
-          </div>
-        </>
-      )}
-
-      {/* ADVISOR TAB VIEW */}
-      {activeTab === 'advisor' && (
-        <>
-          {/* Pending Advisor Applications */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-amber-50/40 flex items-center justify-between">
-              <h3 className="font-bold text-amber-900 text-sm flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-amber-600" />
-                <span>Applications Awaiting Your Class Advisor Review ({pendingAdvisorApps.length})</span>
-              </h3>
-            </div>
-
-            {loading ? (
-              <div className="p-8 text-center text-xs text-slate-500">Loading queue...</div>
-            ) : pendingAdvisorApps.length === 0 ? (
-              <div className="p-10 text-center text-slate-500">
-                <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-                <p className="font-bold text-sm text-slate-800">All advisor reviews complete!</p>
-                <p className="text-xs text-slate-400 mt-0.5">No pending OD or Leave applications in your queue.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {pendingAdvisorApps.map((app) => (
-                  <div key={app.id} className="p-4 hover:bg-slate-50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-900 text-sm">#{app.applicationNumber}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          app.type === 'OD' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {app.type}
-                        </span>
-                        <span className="text-xs font-bold text-slate-800">{app.student?.name}</span>
-                        <span className="text-xs text-slate-400">({app.student?.registerNumber})</span>
-                      </div>
-
-                      <p className="text-xs text-slate-700">
-                        <strong>Reason:</strong> {app.eventName ? `${app.eventName} - ${app.reason}` : app.reason}
-                      </p>
-
-                      <p className="text-xs text-slate-500">
-                        <strong>Dates:</strong> {formatDateRange(app.fromDate, app.toDate)}
-                      </p>
-
-                      <div className="pt-1">
-                        <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
-                          ✓ Tutor Approved by {app.approvalHistories?.find(h => h.role === 'TUTOR')?.staff?.name || 'Tutor'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <button
-                        onClick={() => setSelectedApp(app)}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
-                      >
-                        View Details
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setReviewModalApp(app);
-                          setReviewAction('APPROVE');
-                          setReviewRole('advisor');
-                          setRemarks('');
-                        }}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>Approve</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setReviewModalApp(app);
-                          setReviewAction('REJECT');
-                          setReviewRole('advisor');
-                          setRemarks('');
-                        }}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Processed Advisor History */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-sm">Recently Processed Class Applications</h3>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="p-3.5">App ID</th>
-                    <th className="p-3.5">Student Name</th>
-                    <th className="p-3.5">Type</th>
-                    <th className="p-3.5">Current Stage</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {processedAdvisorApps.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="p-6 text-center text-slate-400">
-                        No processed applications yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    processedAdvisorApps.map((app) => (
-                      <tr key={app.id} className="hover:bg-slate-50">
-                        <td className="p-3.5 font-bold">#{app.applicationNumber}</td>
-                        <td className="p-3.5 font-medium">{app.student?.name} ({app.student?.registerNumber})</td>
-                        <td className="p-3.5"><span className="font-bold text-blue-600">{app.type}</span></td>
-                        <td className="p-3.5"><StageBadge stage={app.currentStage} /></td>
-                        <td className="p-3.5"><StatusBadge status={app.status} /></td>
-                        <td className="p-3.5 text-right">
-                          <button
-                            onClick={() => setSelectedApp(app)}
-                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 font-bold rounded"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Embedded Batch OD Tracker for Advised Class Batch */}
-          <div className="pt-2">
-            <BatchODTracker
-              applications={advisorApps}
-              batchTitle="Advised Class Batch On-Duty & Hackathon Tracker"
-              batchSubtitle="Live status of hackathons, dates, duration in days, and venues for students in your advised class"
-              onViewDetails={setSelectedApp}
-              roleName="CLASS_ADVISOR"
-            />
-          </div>
-        </>
-      )}
-
       {/* Review Modal */}
       {reviewModalApp && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
@@ -848,6 +882,7 @@ export default function TutorDashboard() {
         </div>
       )}
 
+      {/* Application Details Modal */}
       {selectedApp && (
         <ApplicationDetailsModal
           application={selectedApp}

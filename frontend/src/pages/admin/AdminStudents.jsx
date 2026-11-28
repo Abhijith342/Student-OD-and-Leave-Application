@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Camera,
   Trash2,
+  AlertTriangle,
   Image as ImageIcon
 } from 'lucide-react';
 
@@ -54,6 +55,11 @@ export default function AdminStudents() {
   // Edit/Create Modal Photo state
   const [formPhotoFile, setFormPhotoFile] = useState(null);
   const [formPhotoPreview, setFormPhotoPreview] = useState(null);
+
+  // Bulk Selection & Deletion State
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -315,8 +321,44 @@ export default function AdminStudents() {
       });
       setStudents(prev => prev.filter(s => s.id !== st.id));
       if (selectedStudent?.id === st.id) setSelectedStudent(null);
+      setSelectedStudentIds(prev => prev.filter(id => id !== st.id));
     } catch (err) {
       alert(err.message || 'Failed to delete student.');
+    }
+  };
+
+  const allSelected = students.length > 0 && selectedStudentIds.length === students.length;
+  const isPartiallySelected = selectedStudentIds.length > 0 && selectedStudentIds.length < students.length;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedStudentIds([]);
+    } else {
+      setSelectedStudentIds(students.map(s => s.id));
+    }
+  };
+
+  const toggleSelectStudent = (id) => {
+    setSelectedStudentIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedStudentIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      await apiRequest('/admin/students/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedStudentIds })
+      });
+      setSelectedStudentIds([]);
+      setShowBulkDeleteModal(false);
+      fetchStudents();
+    } catch (err) {
+      alert(err.message || 'Failed to delete selected students.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -464,6 +506,40 @@ export default function AdminStudents() {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedStudentIds.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-150">
+          <div className="flex items-center space-x-3 text-xs">
+            <span className="w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs">
+              {selectedStudentIds.length}
+            </span>
+            <div>
+              <p className="font-bold text-rose-900">
+                {selectedStudentIds.length} Student{selectedStudentIds.length > 1 ? 's' : ''} Selected for Action
+              </p>
+              <p className="text-rose-600 text-[11px]">
+                You can delete all selected student records permanently along with their logins and records.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setSelectedStudentIds([])}
+              className="px-3.5 py-1.5 bg-white border border-rose-300 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition-colors"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedStudentIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Student List Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {loading ? (
@@ -479,6 +555,16 @@ export default function AdminStudents() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
+                  <th className="p-3.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => el && (el.indeterminate = isPartiallySelected)}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      title="Select all visible students"
+                    />
+                  </th>
                   <th className="p-3.5">Reg Number</th>
                   <th className="p-3.5">Student Name</th>
                   <th className="p-3.5">Email</th>
@@ -495,8 +581,17 @@ export default function AdminStudents() {
                 {students.map((st) => {
                   const isActive = st.user?.active;
                   const displayEmail = st.email || st.user?.email || 'N/A';
+                  const isSelected = selectedStudentIds.includes(st.id);
                   return (
-                    <tr key={st.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={st.id} className={`transition-colors ${isSelected ? 'bg-rose-50/50' : 'hover:bg-slate-50/80'}`}>
+                      <td className="p-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectStudent(st.id)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="p-3.5 font-bold font-mono text-slate-900">{st.registerNumber}</td>
                       <td className="p-3.5">
                         <div className="flex items-center space-x-3">
@@ -1057,6 +1152,74 @@ export default function AdminStudents() {
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
               >
                 {photoUploading ? 'Saving...' : 'Save Photo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Students Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2 text-rose-700">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                <span>Confirm Bulk Student Deletion</span>
+              </h3>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 space-y-1">
+                <p className="font-bold text-xs">
+                  Are you sure you want to permanently delete {selectedStudentIds.length} student{selectedStudentIds.length > 1 ? 's' : ''}?
+                </p>
+                <p className="text-[11px] text-rose-700 leading-relaxed">
+                  This action is irreversible. It will permanently remove their student records, portal user logins, applications, documents, and password reset requests.
+                </p>
+              </div>
+
+              {/* Sample list of students being deleted */}
+              <div className="border border-slate-200 rounded-xl max-h-40 overflow-y-auto divide-y divide-slate-100 bg-slate-50">
+                {students
+                  .filter(s => selectedStudentIds.includes(s.id))
+                  .map(s => (
+                    <div key={s.id} className="p-2.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900 block">{s.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{s.registerNumber} • Yr {s.year} - Sec {s.section}</span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white border border-slate-200 text-slate-700">
+                        {s.department?.code}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={bulkDeleting}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDeleteConfirm}
+                disabled={bulkDeleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{bulkDeleting ? 'Deleting Students...' : `Confirm Delete (${selectedStudentIds.length})`}</span>
               </button>
             </div>
           </div>

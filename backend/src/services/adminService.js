@@ -586,6 +586,77 @@ async function deleteStudent(adminUser, id) {
   return { message: `Student ${student.name} (${student.registerNumber}) permanently deleted.` };
 }
 
+async function bulkDeleteStudents(adminUser, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AppError('No student IDs provided for bulk deletion.', 400);
+  }
+
+  const students = await prisma.student.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, registerNumber: true, userId: true }
+  });
+
+  if (students.length === 0) {
+    return { count: 0, message: 'No matching students found to delete.' };
+  }
+
+  const studentIds = students.map(s => s.id);
+  const userIds = students.map(s => s.userId).filter(Boolean);
+  const regNumbers = students.map(s => s.registerNumber).filter(Boolean);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Delete associated password reset requests
+    await tx.passwordResetRequest.deleteMany({
+      where: {
+        OR: [
+          { userId: { in: userIds } },
+          { registerNumber: { in: regNumbers } }
+        ]
+      }
+    });
+
+    // 2. Delete applications and associated cascade data
+    const apps = await tx.application.findMany({
+      where: { studentId: { in: studentIds } },
+      select: { id: true }
+    });
+    const appIds = apps.map(a => a.id);
+    if (appIds.length > 0) {
+      await tx.document.deleteMany({ where: { applicationId: { in: appIds } } });
+      await tx.approvalHistory.deleteMany({ where: { applicationId: { in: appIds } } });
+      await tx.parentConfirmation.deleteMany({ where: { applicationId: { in: appIds } } });
+      await tx.notification.deleteMany({ where: { applicationId: { in: appIds } } });
+      await tx.application.deleteMany({ where: { id: { in: appIds } } });
+    }
+
+    // 3. Delete user notifications
+    if (userIds.length > 0) {
+      await tx.notification.deleteMany({ where: { userId: { in: userIds } } });
+    }
+
+    // 4. Delete Student records
+    await tx.student.deleteMany({ where: { id: { in: studentIds } } });
+
+    // 5. Delete User accounts
+    if (userIds.length > 0) {
+      await tx.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  });
+
+  await logAdminAction(
+    adminUser,
+    'BULK_DELETE_STUDENTS',
+    'STUDENT',
+    null,
+    `Bulk deleted ${students.length} student(s)`
+  );
+
+  return {
+    count: students.length,
+    message: `Successfully deleted ${students.length} student record(s).`
+  };
+}
+
 // 3. STAFF MANAGEMENT
 async function getAllStaff(query = {}) {
   const { search, departmentId, role, active } = query;
@@ -649,7 +720,7 @@ async function getAllStaff(query = {}) {
 }
 
 async function createStaff(adminUser, data) {
-  const { name, employeeId, username, email, departmentId, role, password, profilePhoto } = data;
+  const { name, employeeId, username, email, departmentId, role, password, profilePhoto, signature } = data;
 
   if (!name || !employeeId || !departmentId || !role) {
     throw new AppError('Name, Employee ID, Department, and Role are required.', 400);
@@ -694,7 +765,8 @@ async function createStaff(adminUser, data) {
       employeeId,
       departmentId,
       role,
-      profilePhoto: profilePhoto || null
+      profilePhoto: profilePhoto || null,
+      signature: signature || null
     },
     include: {
       user: { select: { id: true, username: true, email: true, active: true, role: true, profilePhoto: true } },
@@ -717,12 +789,25 @@ async function updateStaff(adminUser, id, data) {
     throw new AppError('Staff profile not found.', 404);
   }
 
-  const { name, employeeId, email, departmentId, role, profilePhoto } = data;
+  const { name, employeeId, username, email, departmentId, role, profilePhoto, signature, password } = data;
 
   if (employeeId && employeeId !== existing.employeeId) {
     const duplicateEmp = await prisma.staff.findUnique({ where: { employeeId } });
     if (duplicateEmp) {
       throw new AppError(`Employee ID ${employeeId} already exists.`, 400);
+    }
+  }
+
+  const cleanUsername = username !== undefined && username !== null && String(username).trim() !== ''
+    ? String(username).trim()
+    : undefined;
+
+  if (cleanUsername && cleanUsername !== existing.user.username) {
+    const duplicateUser = await prisma.user.findFirst({
+      where: { username: cleanUsername, NOT: { id: existing.userId } }
+    });
+    if (duplicateUser) {
+      throw new AppError(`Username "${cleanUsername}" is already taken by another account.`, 400);
     }
   }
 
@@ -735,11 +820,15 @@ async function updateStaff(adminUser, id, data) {
     }
   }
 
-  if (email !== undefined || role !== undefined || profilePhoto !== undefined) {
+  if (cleanUsername !== undefined || email !== undefined || role !== undefined || profilePhoto !== undefined || password) {
     const userUpdate = {};
-    if (email !== undefined) userUpdate.email = email;
+    if (cleanUsername !== undefined) userUpdate.username = cleanUsername;
+    if (email !== undefined) userUpdate.email = email || null;
     if (role !== undefined) userUpdate.role = role || existing.role;
     if (profilePhoto !== undefined) userUpdate.profilePhoto = profilePhoto;
+    if (password && String(password).trim() !== '') {
+      userUpdate.passwordHash = await bcrypt.hash(password, 10);
+    }
 
     await prisma.user.update({
       where: { id: existing.userId },
@@ -754,7 +843,8 @@ async function updateStaff(adminUser, id, data) {
       employeeId: employeeId || existing.employeeId,
       departmentId: departmentId !== undefined ? departmentId : existing.departmentId,
       role: role || existing.role,
-      profilePhoto: profilePhoto !== undefined ? profilePhoto : existing.profilePhoto
+      profilePhoto: profilePhoto !== undefined ? profilePhoto : existing.profilePhoto,
+      signature: signature !== undefined ? signature : existing.signature
     },
     include: {
       user: { select: { id: true, username: true, email: true, active: true, role: true, profilePhoto: true } },
@@ -824,6 +914,65 @@ async function deleteStaff(adminUser, id) {
   );
 
   return { message: `Staff member ${staff.name} (${staff.employeeId}) permanently deleted.` };
+}
+
+async function bulkDeleteStaff(adminUser, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AppError('No staff IDs provided for bulk deletion.', 400);
+  }
+
+  const staffList = await prisma.staff.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, employeeId: true, userId: true }
+  });
+
+  if (staffList.length === 0) {
+    return { count: 0, message: 'No matching staff members found to delete.' };
+  }
+
+  const staffIds = staffList.map(s => s.id);
+  const userIds = staffList.map(s => s.userId).filter(Boolean);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Unlink from Sections
+    await tx.section.updateMany({ where: { tutorId: { in: staffIds } }, data: { tutorId: null } });
+    await tx.section.updateMany({ where: { tutor2Id: { in: staffIds } }, data: { tutor2Id: null } });
+    await tx.section.updateMany({ where: { classAdvisorId: { in: staffIds } }, data: { classAdvisorId: null } });
+
+    // 2. Unlink from Students
+    await tx.student.updateMany({ where: { tutorId: { in: staffIds } }, data: { tutorId: null } });
+    await tx.student.updateMany({ where: { classAdvisorId: { in: staffIds } }, data: { classAdvisorId: null } });
+
+    // 3. Remove approval histories and parent confirmations
+    await tx.approvalHistory.deleteMany({ where: { staffId: { in: staffIds } } });
+    await tx.parentConfirmation.deleteMany({ where: { advisorId: { in: staffIds } } });
+
+    // 4. Delete user notifications
+    if (userIds.length > 0) {
+      await tx.notification.deleteMany({ where: { userId: { in: userIds } } });
+    }
+
+    // 5. Delete Staff records
+    await tx.staff.deleteMany({ where: { id: { in: staffIds } } });
+
+    // 6. Delete User accounts
+    if (userIds.length > 0) {
+      await tx.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  });
+
+  await logAdminAction(
+    adminUser,
+    'BULK_DELETE_STAFF',
+    'STAFF',
+    null,
+    `Bulk deleted ${staffList.length} staff member(s)`
+  );
+
+  return {
+    count: staffList.length,
+    message: `Successfully deleted ${staffList.length} staff member(s).`
+  };
 }
 
 async function resetUserPassword(adminUser, userId, newPassword = 'Password123!') {
@@ -1128,6 +1277,105 @@ async function deleteDepartment(adminUser, id) {
   return { message: `Department ${dept.name} has been deleted successfully.` };
 }
 
+async function bulkDeleteDepartments(adminUser, ids, cascade = false) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AppError('No department IDs provided for bulk deletion.', 400);
+  }
+
+  const departments = await prisma.department.findMany({
+    where: { id: { in: ids } },
+    include: {
+      _count: { select: { students: true, staff: true, sections: true, years: true } }
+    }
+  });
+
+  if (departments.length === 0) {
+    return { count: 0, message: 'No matching departments found to delete.' };
+  }
+
+  const deptIds = departments.map(d => d.id);
+  const totalStudents = departments.reduce((sum, d) => sum + d._count.students, 0);
+
+  if (totalStudents > 0 && !cascade) {
+    throw new AppError(`Selected departments contain ${totalStudents} enrolled student(s). Enable cascade to remove enrolled students and delete departments.`, 400);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (totalStudents > 0 && cascade) {
+      // Find students in these departments
+      const students = await tx.student.findMany({
+        where: { departmentId: { in: deptIds } },
+        select: { id: true, userId: true, registerNumber: true }
+      });
+      const studentIds = students.map(s => s.id);
+      const userIds = students.map(s => s.userId).filter(Boolean);
+      const regNos = students.map(s => s.registerNumber).filter(Boolean);
+
+      if (studentIds.length > 0) {
+        await tx.passwordResetRequest.deleteMany({
+          where: { OR: [{ userId: { in: userIds } }, { registerNumber: { in: regNos } }] }
+        });
+
+        const apps = await tx.application.findMany({
+          where: { studentId: { in: studentIds } },
+          select: { id: true }
+        });
+        const appIds = apps.map(a => a.id);
+        if (appIds.length > 0) {
+          await tx.document.deleteMany({ where: { applicationId: { in: appIds } } });
+          await tx.approvalHistory.deleteMany({ where: { applicationId: { in: appIds } } });
+          await tx.parentConfirmation.deleteMany({ where: { applicationId: { in: appIds } } });
+          await tx.notification.deleteMany({ where: { applicationId: { in: appIds } } });
+          await tx.application.deleteMany({ where: { id: { in: appIds } } });
+        }
+
+        if (userIds.length > 0) {
+          await tx.notification.deleteMany({ where: { userId: { in: userIds } } });
+        }
+
+        await tx.student.deleteMany({ where: { id: { in: studentIds } } });
+        if (userIds.length > 0) {
+          await tx.user.deleteMany({ where: { id: { in: userIds } } });
+        }
+      }
+    } else {
+      // Unlink any remaining students
+      await tx.student.updateMany({
+        where: { departmentId: { in: deptIds } },
+        data: { departmentId: null, sectionId: null }
+      });
+    }
+
+    // Unlink staff from these departments
+    await tx.staff.updateMany({
+      where: { departmentId: { in: deptIds } },
+      data: { departmentId: null }
+    });
+
+    // Delete sections belonging to these departments
+    await tx.section.deleteMany({ where: { departmentId: { in: deptIds } } });
+
+    // Delete academic years belonging to these departments
+    await tx.academicYear.deleteMany({ where: { departmentId: { in: deptIds } } });
+
+    // Delete departments
+    await tx.department.deleteMany({ where: { id: { in: deptIds } } });
+  });
+
+  await logAdminAction(
+    adminUser,
+    'BULK_DELETE_DEPARTMENTS',
+    'DEPARTMENT',
+    null,
+    `Bulk deleted ${departments.length} department(s)`
+  );
+
+  return {
+    count: departments.length,
+    message: `Successfully deleted ${departments.length} department(s).`
+  };
+}
+
 async function getDepartmentYears(departmentId) {
   const years = await prisma.academicYear.findMany({
     where: { departmentId },
@@ -1401,6 +1649,55 @@ async function deleteSection(adminUser, id) {
   await prisma.section.delete({ where: { id } });
   await logAdminAction(adminUser, 'DELETE_SECTION', 'SECTION', id, `Deleted Section ${sec.name}`);
   return { message: `Section ${sec.name} deleted successfully.` };
+}
+
+async function bulkDeleteSections(adminUser, ids, force = false) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AppError('No section IDs provided for bulk deletion.', 400);
+  }
+
+  const sections = await prisma.section.findMany({
+    where: { id: { in: ids } },
+    include: { _count: { select: { students: true } } }
+  });
+
+  if (sections.length === 0) {
+    return { count: 0, message: 'No matching sections found to delete.' };
+  }
+
+  const totalStudents = sections.reduce((sum, s) => sum + s._count.students, 0);
+  if (totalStudents > 0 && !force) {
+    throw new AppError(`Selected sections contain ${totalStudents} enrolled student(s). Enable force to unlink students and delete sections.`, 400);
+  }
+
+  const sectionIds = sections.map(s => s.id);
+
+  await prisma.$transaction(async (tx) => {
+    // Unlink students from these sections if force
+    if (totalStudents > 0) {
+      await tx.student.updateMany({
+        where: { sectionId: { in: sectionIds } },
+        data: { sectionId: null }
+      });
+    }
+
+    await tx.section.deleteMany({
+      where: { id: { in: sectionIds } }
+    });
+  });
+
+  await logAdminAction(
+    adminUser,
+    'BULK_DELETE_SECTIONS',
+    'SECTION',
+    null,
+    `Bulk deleted ${sections.length} section(s)`
+  );
+
+  return {
+    count: sections.length,
+    message: `Successfully deleted ${sections.length} section(s).`
+  };
 }
 
 // 6. EXCEL IMPORT
@@ -1831,11 +2128,13 @@ module.exports = {
   createStudent,
   updateStudent,
   deleteStudent,
+  bulkDeleteStudents,
   toggleStudentStatus,
   getAllStaff,
   createStaff,
   updateStaff,
   deleteStaff,
+  bulkDeleteStaff,
   toggleStaffStatus,
   resetUserPassword,
   getAllDepartments,
@@ -1843,6 +2142,7 @@ module.exports = {
   updateDepartment,
   getDepartmentById,
   deleteDepartment,
+  bulkDeleteDepartments,
   getDepartmentYears,
   createDepartmentYear,
   updateDepartmentYear,
@@ -1851,6 +2151,7 @@ module.exports = {
   createYearSection,
   updateSection,
   deleteSection,
+  bulkDeleteSections,
   getAcademicStructure,
   bulkAssignStaff,
   processExcelPreview,

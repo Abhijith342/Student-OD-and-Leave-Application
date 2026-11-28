@@ -14,8 +14,10 @@ import {
   AlertCircle,
   Camera,
   Trash2,
+  AlertTriangle,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  FileSignature
 } from 'lucide-react';
 
 export default function AdminStaff() {
@@ -44,9 +46,24 @@ export default function AdminStaff() {
   const [photoError, setPhotoError] = useState(null);
   const [photoSuccess, setPhotoSuccess] = useState(null);
 
-  // Edit/Create Modal Photo state
+  // Quick Signature Upload Modal State
+  const [signatureModalStaff, setSignatureModalStaff] = useState(null);
+  const [selectedSignatureFile, setSelectedSignatureFile] = useState(null);
+  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState(null);
+  const [signatureUploading, setSignatureUploading] = useState(false);
+  const [signatureError, setSignatureError] = useState(null);
+  const [signatureSuccess, setSignatureSuccess] = useState(null);
+
+  // Edit/Create Modal Photo & Signature state
   const [formPhotoFile, setFormPhotoFile] = useState(null);
   const [formPhotoPreview, setFormPhotoPreview] = useState(null);
+  const [formSignatureFile, setFormSignatureFile] = useState(null);
+  const [formSignaturePreview, setFormSignaturePreview] = useState(null);
+
+  // Bulk Selection & Deletion State
+  const [selectedStaffIds, setSelectedStaffIds] = useState([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -105,6 +122,8 @@ export default function AdminStaff() {
     setFormSuccess(null);
     setFormPhotoFile(null);
     setFormPhotoPreview(null);
+    setFormSignatureFile(null);
+    setFormSignaturePreview(null);
     setFormData({
       name: '',
       employeeId: '',
@@ -123,6 +142,8 @@ export default function AdminStaff() {
     setFormSuccess(null);
     setFormPhotoFile(null);
     setFormPhotoPreview(s.profilePhoto || s.user?.profilePhoto || null);
+    setFormSignatureFile(null);
+    setFormSignaturePreview(s.signature || null);
     setFormData({
       name: s.name || '',
       employeeId: s.employeeId || '',
@@ -143,14 +164,19 @@ export default function AdminStaff() {
 
     try {
       let body;
-      if (formPhotoFile) {
+      if (formPhotoFile || formSignatureFile) {
         body = new FormData();
         Object.keys(formData).forEach(k => {
           if (formData[k] !== undefined && formData[k] !== null) {
             body.append(k, formData[k]);
           }
         });
-        body.append('profilePhoto', formPhotoFile);
+        if (formPhotoFile) {
+          body.append('profilePhoto', formPhotoFile);
+        }
+        if (formSignatureFile) {
+          body.append('signature', formSignatureFile);
+        }
       } else {
         body = JSON.stringify(formData);
       }
@@ -246,6 +272,73 @@ export default function AdminStaff() {
     }
   };
 
+  // Quick Signature Modal Handlers
+  const openSignatureUploadModal = (s) => {
+    setSignatureModalStaff(s);
+    setSelectedSignatureFile(null);
+    setSignaturePreviewUrl(s.signature || null);
+    setSignatureError(null);
+    setSignatureSuccess(null);
+  };
+
+  const handleSignatureSelect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedSignatureFile(file);
+      setSignaturePreviewUrl(URL.createObjectURL(file));
+      setSignatureError(null);
+    }
+  };
+
+  const handleSignatureUploadSubmit = async () => {
+    if (!selectedSignatureFile || !signatureModalStaff) {
+      setSignatureError('Please select a signature image file first.');
+      return;
+    }
+    setSignatureUploading(true);
+    setSignatureError(null);
+    try {
+      const fd = new FormData();
+      fd.append('signature', selectedSignatureFile);
+      const res = await apiRequest(`/admin/staff/${signatureModalStaff.id}/signature`, {
+        method: 'POST',
+        body: fd
+      });
+      setSignatureSuccess('Staff signature uploaded successfully!');
+      const updatedPath = res.data.signature;
+      setStaffList(prev => prev.map(s => s.id === signatureModalStaff.id ? { ...s, signature: updatedPath } : s));
+      setTimeout(() => {
+        setSignatureModalStaff(null);
+      }, 900);
+    } catch (err) {
+      setSignatureError(err.message || 'Failed to upload signature.');
+    } finally {
+      setSignatureUploading(false);
+    }
+  };
+
+  const handleRemoveSignature = async () => {
+    if (!signatureModalStaff) return;
+    if (!window.confirm(`Are you sure you want to remove the certificate signature for ${signatureModalStaff.name}?`)) return;
+    setSignatureUploading(true);
+    try {
+      await apiRequest(`/admin/staff/${signatureModalStaff.id}/signature`, {
+        method: 'DELETE'
+      });
+      setSignaturePreviewUrl(null);
+      setSelectedSignatureFile(null);
+      setSignatureSuccess('Staff signature removed successfully.');
+      setStaffList(prev => prev.map(s => s.id === signatureModalStaff.id ? { ...s, signature: null } : s));
+      setTimeout(() => {
+        setSignatureModalStaff(null);
+      }, 700);
+    } catch (err) {
+      setSignatureError(err.message || 'Failed to remove signature.');
+    } finally {
+      setSignatureUploading(false);
+    }
+  };
+
   const toggleStaffStatus = async (s) => {
     const newStatus = !s.user?.active;
     if (!window.confirm(`Are you sure you want to ${newStatus ? 'activate' : 'deactivate'} staff account for ${s.name}?`)) {
@@ -273,8 +366,44 @@ export default function AdminStaff() {
         method: 'DELETE'
       });
       setStaffList(prev => prev.filter(staff => staff.id !== s.id));
+      setSelectedStaffIds(prev => prev.filter(id => id !== s.id));
     } catch (err) {
       alert(err.message || 'Failed to delete staff member.');
+    }
+  };
+
+  const allStaffSelected = staffList.length > 0 && selectedStaffIds.length === staffList.length;
+  const isPartiallyStaffSelected = selectedStaffIds.length > 0 && selectedStaffIds.length < staffList.length;
+
+  const toggleSelectAllStaff = () => {
+    if (allStaffSelected) {
+      setSelectedStaffIds([]);
+    } else {
+      setSelectedStaffIds(staffList.map(s => s.id));
+    }
+  };
+
+  const toggleSelectStaff = (id) => {
+    setSelectedStaffIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDeleteStaffConfirm = async () => {
+    if (selectedStaffIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      await apiRequest('/admin/staff/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedStaffIds })
+      });
+      setSelectedStaffIds([]);
+      setShowBulkDeleteModal(false);
+      fetchStaff();
+    } catch (err) {
+      alert(err.message || 'Failed to delete selected staff members.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -384,6 +513,40 @@ export default function AdminStaff() {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedStaffIds.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-150">
+          <div className="flex items-center space-x-3 text-xs">
+            <span className="w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs">
+              {selectedStaffIds.length}
+            </span>
+            <div>
+              <p className="font-bold text-rose-900">
+                {selectedStaffIds.length} Staff Member{selectedStaffIds.length > 1 ? 's' : ''} Selected
+              </p>
+              <p className="text-rose-600 text-[11px]">
+                Deleting will remove their staff IDs, login accounts, and unassign them from tutored/advised students and sections.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setSelectedStaffIds([])}
+              className="px-3.5 py-1.5 bg-white border border-rose-300 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition-colors"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedStaffIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Staff Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         {loading ? (
@@ -399,12 +562,23 @@ export default function AdminStaff() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
+                  <th className="p-3.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={allStaffSelected}
+                      ref={el => el && (el.indeterminate = isPartiallyStaffSelected)}
+                      onChange={toggleSelectAllStaff}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      title="Select all staff members"
+                    />
+                  </th>
                   <th className="p-3.5">Employee ID</th>
                   <th className="p-3.5">Staff Name</th>
                   <th className="p-3.5">Username / Email</th>
                   <th className="p-3.5">Role</th>
                   <th className="p-3.5">Department</th>
                   <th className="p-3.5">Assigned Students</th>
+                  <th className="p-3.5">Signature</th>
                   <th className="p-3.5">Status</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
@@ -412,8 +586,17 @@ export default function AdminStaff() {
               <tbody className="divide-y divide-slate-100">
                 {staffList.map((s) => {
                   const isActive = s.user?.active;
+                  const isSelected = selectedStaffIds.includes(s.id);
                   return (
-                    <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={s.id} className={`transition-colors ${isSelected ? 'bg-rose-50/50' : 'hover:bg-slate-50/80'}`}>
+                      <td className="p-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectStaff(s.id)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="p-3.5 font-bold font-mono text-slate-900">{s.employeeId}</td>
                       <td className="p-3.5">
                         <div className="flex items-center space-x-3">
@@ -470,6 +653,49 @@ export default function AdminStaff() {
                       <td className="p-3.5 text-[11px]">
                         <span className="block">Tutored: <strong>{s._count?.tutoredStudents || 0}</strong></span>
                         <span className="block text-purple-700">Advised: <strong>{s._count?.advisedStudents || 0}</strong></span>
+                      </td>
+                      {/* Signature Column */}
+                      <td className="p-3.5">
+                        {s.signature ? (
+                          <div className="flex items-center space-x-2">
+                            <div 
+                              onClick={() => openSignatureUploadModal(s)}
+                              title="Click to view or replace certificate signature"
+                              className="group relative cursor-pointer"
+                            >
+                              <div className="h-9 w-20 bg-slate-50 border border-slate-200 rounded-lg p-1 flex items-center justify-center overflow-hidden shadow-2xs group-hover:border-indigo-400 group-hover:shadow-xs transition-all">
+                                <img
+                                  src={`http://localhost:5000${s.signature}`}
+                                  alt={`${s.name} signature`}
+                                  className="h-full w-full object-contain"
+                                  onError={(e) => { e.target.style.display = 'none'; }}
+                                />
+                              </div>
+                              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openSignatureUploadModal(s)}
+                              title="Change Signature"
+                              className="p-1 hover:bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openSignatureUploadModal(s)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
+                            title="Upload signature image to embed into approved certificates"
+                          >
+                            <FileSignature className="w-3 h-3 text-amber-600" />
+                            <span>+ Signature</span>
+                          </button>
+                        )}
                       </td>
                       <td className="p-3.5">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
@@ -587,6 +813,56 @@ export default function AdminStaff() {
                           setFormPhotoFile(null);
                           setFormPhotoPreview(null);
                           setFormData({ ...formData, profilePhoto: null });
+                        }}
+                        className="px-2.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold rounded-lg text-xs transition-colors"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Staff Signature Section */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center space-x-4">
+                <div className="relative w-24 h-14 shrink-0 bg-white border border-slate-300 rounded-lg flex items-center justify-center overflow-hidden p-1 shadow-2xs">
+                  {formSignaturePreview ? (
+                    <img
+                      src={formSignaturePreview.startsWith('blob:') ? formSignaturePreview : `http://localhost:5000${formSignaturePreview}`}
+                      alt="Signature Preview"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <FileSignature className="w-6 h-6 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <label className="block font-bold text-slate-800 mb-0.5">Staff Certificate Signature</label>
+                  <p className="text-[11px] text-slate-500 mb-2">Upload official digital signature to embed in approved OD & Leave certificates (PNG/JPG)</p>
+                  <div className="flex items-center space-x-2">
+                    <label className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg cursor-pointer text-xs inline-flex items-center space-x-1.5 shadow-2xs transition-colors">
+                      <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{formSignaturePreview ? 'Change Signature' : 'Select Signature'}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const file = e.target.files[0];
+                            setFormSignatureFile(file);
+                            setFormSignaturePreview(URL.createObjectURL(file));
+                          }
+                        }}
+                      />
+                    </label>
+                    {formSignaturePreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormSignatureFile(null);
+                          setFormSignaturePreview(null);
+                          setFormData({ ...formData, signature: null });
                         }}
                         className="px-2.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold rounded-lg text-xs transition-colors"
                       >
@@ -846,6 +1122,185 @@ export default function AdminStaff() {
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
               >
                 {photoUploading ? 'Saving...' : 'Save Photo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Signature Upload Modal */}
+      {signatureModalStaff && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                <FileSignature className="w-4 h-4 text-indigo-600" />
+                <span>Upload Certificate Signature</span>
+              </h3>
+              <button onClick={() => setSignatureModalStaff(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+                  {signatureModalStaff.name ? signatureModalStaff.name.charAt(0).toUpperCase() : 'S'}
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs">{signatureModalStaff.name}</h4>
+                  <p className="text-slate-500 font-mono text-[11px]">{signatureModalStaff.employeeId} • {signatureModalStaff.role}</p>
+                </div>
+              </div>
+
+              {/* Signature Preview Canvas Box */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  Official Signature Preview (Embedded in Certificates)
+                </label>
+                <div className="w-full h-32 bg-slate-50/50 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-3 relative overflow-hidden group shadow-inner">
+                  {signaturePreviewUrl ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                      <img
+                        src={signaturePreviewUrl.startsWith('blob:') ? signaturePreviewUrl : `http://localhost:5000${signaturePreviewUrl}`}
+                        alt="Signature Preview"
+                        className="max-h-24 max-w-full object-contain filter drop-shadow-xs"
+                      />
+                      <span className="absolute bottom-2 right-2 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center space-x-1">
+                        <CheckCircle className="w-2.5 h-2.5 text-emerald-600" />
+                        <span>Active on Certificate</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-center space-y-1">
+                      <FileSignature className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="text-[11px] font-semibold text-slate-400">No signature uploaded yet</p>
+                      <p className="text-[10px] text-slate-400">PNG with transparent background or high-contrast scan recommended</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {signatureError && (
+                <div className="p-2.5 bg-rose-50 text-rose-700 rounded-xl font-medium text-[11px]">
+                  {signatureError}
+                </div>
+              )}
+              {signatureSuccess && (
+                <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-medium text-[11px]">
+                  {signatureSuccess}
+                </div>
+              )}
+
+              <div className="space-y-2 pt-1">
+                <label className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl cursor-pointer text-xs flex items-center justify-center space-x-2 transition-colors border border-indigo-200">
+                  <Upload className="w-4 h-4" />
+                  <span>{signaturePreviewUrl ? 'Choose Different Signature Image' : 'Select Signature Image'}</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={handleSignatureSelect}
+                  />
+                </label>
+
+                {(signatureModalStaff.signature || signaturePreviewUrl) && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveSignature}
+                    disabled={signatureUploading}
+                    className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Signature from Certificate</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSignatureModalStaff(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSignatureUploadSubmit}
+                disabled={!selectedSignatureFile || signatureUploading}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
+              >
+                {signatureUploading ? 'Saving Signature...' : 'Save Signature'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Staff Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2 text-rose-700">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                <span>Confirm Bulk Staff Deletion</span>
+              </h3>
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 space-y-1">
+                <p className="font-bold text-xs">
+                  Are you sure you want to permanently delete {selectedStaffIds.length} staff member{selectedStaffIds.length > 1 ? 's' : ''}?
+                </p>
+                <p className="text-[11px] text-rose-700 leading-relaxed">
+                  This will remove their staff profiles, user login accounts, and unassign them from any tutored or advised students and sections.
+                </p>
+              </div>
+
+              {/* Sample list of staff being deleted */}
+              <div className="border border-slate-200 rounded-xl max-h-40 overflow-y-auto divide-y divide-slate-100 bg-slate-50">
+                {staffList
+                  .filter(s => selectedStaffIds.includes(s.id))
+                  .map(s => (
+                    <div key={s.id} className="p-2.5 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900 block">{s.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{s.employeeId} • {s.user?.username}</span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white border border-slate-200 text-slate-700">
+                        {s.role}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={bulkDeleting}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDeleteStaffConfirm}
+                disabled={bulkDeleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{bulkDeleting ? 'Deleting Staff...' : `Confirm Delete (${selectedStaffIds.length})`}</span>
               </button>
             </div>
           </div>

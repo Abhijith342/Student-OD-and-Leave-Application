@@ -43,21 +43,12 @@ export default function AdminImportStudents() {
     formData.append('file', selectedFile);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/admin/import-students/upload', {
+      const res = await apiRequest('/admin/import-students/upload', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
         body: formData
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Excel file processing failed.');
-      }
-
-      setPreview(data.data.preview);
+      setPreview(res.data.preview);
     } catch (err) {
       setError(err.message || 'Failed to parse Excel file.');
     } finally {
@@ -191,19 +182,19 @@ export default function AdminImportStudents() {
           </div>
 
           {/* Row Errors Report List */}
-          {preview.errorRows && preview.errorRows.length > 0 && (
+          {(preview.errorRows || preview.errors) && (preview.errorRows || preview.errors).length > 0 && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-2 text-xs">
               <h3 className="font-bold text-rose-900 flex items-center space-x-1.5">
                 <AlertTriangle className="w-4 h-4 text-rose-600" />
-                <span>Validation Errors Detected ({preview.errorRows.length} Rows with Issues)</span>
+                <span>Validation Errors Detected ({(preview.errorRows || preview.errors).length} Rows with Issues)</span>
               </h3>
               <p className="text-rose-700 text-[11px]">
                 Invalid rows will be skipped during import. Fix values in Excel if you wish to import them.
               </p>
               <div className="max-h-40 overflow-y-auto space-y-1.5 pt-2 border-t border-rose-200">
-                {preview.errorRows.map((err, idx) => (
+                {(preview.errorRows || preview.errors).map((err, idx) => (
                   <div key={idx} className="p-2 bg-white rounded-lg border border-rose-200 text-rose-800 font-mono text-[11px]">
-                    <strong>Row {err.rowNumber}:</strong> Register No: {err.registerNumber || 'N/A'} | Error: <span className="text-rose-600 font-bold">{err.errors ? err.errors.join('; ') : err.error}</span>
+                    <strong>Row {err.row || err.rowNumber}:</strong> Register No: {err.registerNumber || 'N/A'} {err.studentName || err.name ? `| Student: ${err.studentName || err.name}` : ''} | Error: <span className="text-rose-600 font-bold">{err.errors ? err.errors.join('; ') : err.error}</span>
                   </div>
                 ))}
               </div>
@@ -231,8 +222,8 @@ export default function AdminImportStudents() {
                   {preview.validRows.map((row, idx) => (
                     <tr key={idx} className="hover:bg-slate-50">
                       <td className="p-3 font-bold font-mono text-slate-900">{row.registerNumber}</td>
-                      <td className="p-3 font-bold text-slate-800">{row.name}</td>
-                      <td className="p-3 font-semibold text-slate-700">{row.departmentCode || row.departmentName}</td>
+                      <td className="p-3 font-bold text-slate-800">{row.studentName || row.name}</td>
+                      <td className="p-3 font-semibold text-slate-700">{row.departmentCode || row.deptCode || row.departmentName}</td>
                       <td className="p-3">Yr {row.year} - Sec {row.section}</td>
                       <td className="p-3 font-mono text-emerald-700">{row.parentPhone || 'N/A'}</td>
                       <td className="p-3 font-medium text-slate-700">{row.tutorName || 'N PREMKUMAR'}</td>

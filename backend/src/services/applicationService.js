@@ -38,7 +38,8 @@ async function attachHodToApplication(application) {
       id: true,
       name: true,
       employeeId: true,
-      role: true
+      role: true,
+      signature: true
     }
   });
 

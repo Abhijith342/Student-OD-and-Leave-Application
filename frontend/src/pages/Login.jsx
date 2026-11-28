@@ -80,7 +80,7 @@ export default function Login() {
   const demoAccounts = [
     { label: 'Admin (Institutional)', username: 'admin', pass: 'Password123!', role: 'ADMIN', desc: 'Full Management & Reset' },
     { label: 'Tutor (Divya)', username: 'divya', pass: 'Password123!', role: 'TUTOR', desc: 'Assigned Tutor (AI & DS)' },
-    { label: 'Class Advisor (Premkumar)', username: 'premkumar', pass: 'Password123!', role: 'CLASS_ADVISOR', desc: 'Stage 2 & Parent Call' },
+    { label: 'Class Advisor (Premkumar)', username: 'premkumar', pass: 'Password123!', role: 'CLASS_ADVISOR', desc: 'Stage 2 Review & Forward' },
     { label: 'HOD (Dr. Pavithra)', username: 'pavithra', pass: 'Password123!', role: 'HOD', desc: 'Department Head' },
     { label: 'Principal Office', username: 'principal_office', pass: 'Password123!', role: 'PRINCIPAL_OFFICE', desc: 'Final Institutional OD Seal' }
   ];

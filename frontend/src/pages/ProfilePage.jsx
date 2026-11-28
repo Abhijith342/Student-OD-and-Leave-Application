@@ -229,7 +229,7 @@ export default function ProfilePage() {
                       {student.classAdvisor?.name || 'Unassigned'}
                     </h5>
                     <p className="text-slate-500 text-[11px]">
-                      {student.classAdvisor?.employeeId ? `Emp ID: ${student.classAdvisor.employeeId}` : 'Parent Call & Stage 2'}
+                      {student.classAdvisor?.employeeId ? `Emp ID: ${student.classAdvisor.employeeId}` : 'Class Advisor Review & Stage 2'}
                     </p>
                   </div>
                 </div>
